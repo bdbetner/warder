@@ -1,0 +1,33 @@
+session: session-demo
+agent: Local Shell (local-shell)
+profile: local-script
+status: completed
+exit code: 0
+command: sh -c 'echo hello > /tmp/warder-quickstart/protected/hello.txt'
+protected zones: quickstart-protected
+root pid: 12345
+cgroup: degraded: cgroup tagging skipped because --cgroup-root was not provided
+landlock: not requested
+snapshot: not requested
+session readiness: degraded
+blocked reasons: none
+degraded reasons:
+- cgroup tagging skipped because --cgroup-root was not provided
+dependency changes: none_detected (command metadata does not reference known package managers or dependency files)
+dependency file changes: none
+file activity: 3 event(s)
+file activity zones: quickstart-protected=3
+file activity sources: inotify=3
+file activity attribution: session-window=3
+network activity: 0 event(s)
+degraded coverage: 1 reason(s)
+coverage degraded reasons:
+- cgroup tagging skipped because --cgroup-root was not provided
+review guidance:
+- Inspect file activity rollups and raw journal events for unexpected protected-zone changes.
+- Inotify session-window events are observational and are not PID-attributed enforcement evidence.
+- Treat degraded coverage as incomplete protection, not success.
+recovery guidance:
+- Run `warder journal --db /tmp/warder-quickstart/warder.sqlite3 --session session-demo --file` to inspect protected-zone file activity.
+- Rerun after addressing degraded coverage if this session needed strong protection.
+- Run `warder status` to inspect host support before rerunning a session that needed strong protection.

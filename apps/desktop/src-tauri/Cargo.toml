@@ -1,0 +1,23 @@
+[package]
+name = "warder-desktop"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "warder_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+warder-cli = { path = "../../../crates/cli" }
+warder-config = { path = "../../../crates/config" }
+warder-core = { path = "../../../crates/core" }
+warder-daemon = { path = "../../../crates/daemon" }
+warder-db = { path = "../../../crates/db" }
+warder-gui-support = { path = "../../../crates/gui-support" }
+warder-journal = { path = "../../../crates/journal" }

@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install desktop system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            fakeroot \
+            rpm
+
+      - name: Install Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace
+
+      - name: Build eBPF file journal object
+        run: scripts/build-ebpf-file-journal.sh
+
+      - name: Build eBPF network journal object
+        run: scripts/build-ebpf-network-journal.sh
+
+      - name: Build desktop frontend
+        working-directory: apps/desktop
+        run: npm run build
+
+      - name: Run desktop GUI smoke
+        working-directory: apps/desktop
+        run: npm test
+
+      - name: Build release CLI
+        run: cargo build --release -p warder-cli --bin warder
+
+      - name: Build desktop app
+        working-directory: apps/desktop
+        run: npm run tauri -- build --bundles deb,rpm,appimage --ci
+
+      - name: Collect release artifacts
+        run: scripts/collect-release-artifacts.sh --deb-dir target/release/bundle/deb --rpm-dir target/release/bundle/rpm --appimage-dir target/release/bundle/appimage
+
+      - name: Check artifact collection smoke
+        run: scripts/release-artifacts-smoke.sh
+
+      - name: Check collected release metadata
+        run: |
+          cd release-artifacts
+          sha256sum --check SHA256SUMS
+          python3 -m json.tool release-manifest.json >/dev/null
+
+      - name: Check Debian package smoke
+        run: scripts/deb-artifact-smoke.sh
+
+      - name: Check Debian install smoke
+        run: scripts/deb-install-smoke.sh
+
+      - name: Check AppImage package smoke
+        run: scripts/appimage-artifact-smoke.sh
+
+      - name: Check RPM package smoke
+        run: scripts/rpm-artifact-smoke.sh
+
+      - name: Check release trust policy
+        run: scripts/release-trust-policy-smoke.sh
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: warder-linux-x86_64
+          path: release-artifacts/
+          if-no-files-found: error
+
+      - name: Run quickstart smoke
+        run: scripts/quickstart-demo.sh
+
+      - name: Run CLI flow smoke
+        run: scripts/cli-flow-smoke.sh
+
+      - name: Run OpenClaw integration smoke
+        run: scripts/openclaw-integration-smoke.sh
+
+      - name: Run profile-template smoke
+        run: scripts/profile-template-demo.sh
+
+      - name: Run prototype smoke
+        run: scripts/prototype-demo.sh

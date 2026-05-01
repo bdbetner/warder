@@ -1,0 +1,18 @@
+[enforcement]
+landlock = "required"
+cgroups = "required"
+writable-roots = ["/var/tmp/warder-landlock-demo-writable"]
+
+[[zones]]
+id = "landlock-protected"
+name = "Landlock Protected Directory"
+description = "A throwaway directory used to prove required Landlock write denial when the host supports it."
+paths = ["/tmp/warder-landlock-demo/protected"]
+write_policy = "deny"
+snapshot = "disabled"
+
+[[agents]]
+id = "local-shell"
+label = "Local Shell"
+command = "sh"
+profile = "local-script"

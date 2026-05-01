@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="760" viewBox="0 0 1160 760" role="img" aria-labelledby="title desc">
+  <title id="title">Sample Warder receipt output</title>
+  <desc id="desc">Terminal-style screenshot showing a Warder session receipt with degraded cgroup coverage and observed file activity.</desc>
+  <rect width="1160" height="760" rx="14" fill="#111827"/>
+  <rect x="0" y="0" width="1160" height="42" rx="14" fill="#1f2937"/>
+  <circle cx="24" cy="21" r="6" fill="#ef4444"/>
+  <circle cx="46" cy="21" r="6" fill="#f59e0b"/>
+  <circle cx="68" cy="21" r="6" fill="#22c55e"/>
+  <text x="94" y="27" fill="#d1d5db" font-family="DejaVu Sans Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">warder receipt --session session-demo</text>
+  <text x="28" y="78" fill="#e5e7eb" font-family="DejaVu Sans Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">
+    <tspan x="28" dy="0">session: session-demo</tspan>
+    <tspan x="28" dy="26">agent: Local Shell (local-shell)</tspan>
+    <tspan x="28" dy="26">profile: local-script</tspan>
+    <tspan x="28" dy="26">status: completed</tspan>
+    <tspan x="28" dy="26">exit code: 0</tspan>
+    <tspan x="28" dy="26">command: sh -c 'echo hello &gt; /tmp/warder-quickstart/protected/hello.txt'</tspan>
+    <tspan x="28" dy="26">protected zones: quickstart-protected</tspan>
+    <tspan x="28" dy="26">root pid: 12345</tspan>
+    <tspan x="28" dy="26">cgroup: degraded: cgroup tagging skipped because --cgroup-root was not provided</tspan>
+    <tspan x="28" dy="26">landlock: not requested</tspan>
+    <tspan x="28" dy="26">snapshot: not requested</tspan>
+    <tspan x="28" dy="26">session readiness: degraded</tspan>
+    <tspan x="28" dy="26">blocked reasons: none</tspan>
+    <tspan x="28" dy="26">degraded reasons:</tspan>
+    <tspan x="28" dy="26">- cgroup tagging skipped because --cgroup-root was not provided</tspan>
+    <tspan x="28" dy="26">file activity: 3 event(s)</tspan>
+    <tspan x="28" dy="26">file activity zones: quickstart-protected=3</tspan>
+    <tspan x="28" dy="26">file activity sources: inotify=3</tspan>
+    <tspan x="28" dy="26">network activity: 0 event(s)</tspan>
+    <tspan x="28" dy="26">degraded coverage: 1 reason(s)</tspan>
+    <tspan x="28" dy="26">review guidance:</tspan>
+    <tspan x="28" dy="26">- Inspect file activity rollups and raw journal events for unexpected changes.</tspan>
+    <tspan x="28" dy="26">- Treat degraded coverage as incomplete protection, not success.</tspan>
+    <tspan x="28" dy="26">recovery guidance:</tspan>
+    <tspan x="28" dy="26">- Rerun after addressing degraded coverage if this session needed strong protection.</tspan>
+  </text>
+</svg>

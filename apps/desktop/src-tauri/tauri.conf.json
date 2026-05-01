@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Warder",
+  "version": "0.1.0",
+  "identifier": "dev.betnbd.warder",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Warder",
+        "width": 1120,
+        "height": 760,
+        "minWidth": 900,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "rpm", "appimage"],
+    "publisher": "betnbd",
+    "homepage": "https://github.com/betnbd/warder",
+    "category": "Utility",
+    "shortDescription": "Local safety controls for supervised agent sessions.",
+    "longDescription": "Warder provides a native Linux GUI for configuring protected paths, launching supervised local agent sessions, and reviewing receipts and journals.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png"
+    ],
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/bin/warder": "../../../target/release/warder"
+        }
+      },
+      "rpm": {
+        "files": {
+          "/usr/bin/warder": "../../../target/release/warder"
+        }
+      }
+    }
+  }
+}

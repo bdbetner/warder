@@ -1,0 +1,20 @@
+[workspace]
+members = [
+  "crates/core",
+  "crates/db",
+  "crates/policy",
+  "crates/config",
+  "crates/cli",
+  "crates/daemon",
+  "crates/enforcement",
+  "crates/journal",
+  "crates/snapshot",
+  "crates/gui-support",
+  "apps/desktop/src-tauri",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/betnbd/warder"

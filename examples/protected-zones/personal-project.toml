@@ -1,0 +1,17 @@
+[enforcement]
+landlock = "required"
+cgroups = "required"
+writable-roots = ["/tmp", "/var/tmp"]
+
+[[zones]]
+id = "personal-project"
+name = "Personal Project"
+description = "A protected zone for a single local project."
+paths = ["/home/user/projects/example"]
+write_policy = "deny"
+snapshot = "required"
+
+[[agents]]
+id = "local-agent"
+label = "Local Agent"
+command = "agent-command"
