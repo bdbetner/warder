@@ -25,9 +25,13 @@ if ! command -v rpm >/dev/null 2>&1; then
   exit 1
 fi
 
-package_name="$(rpm -qp --queryformat '%{NAME}' "$RPM_PATH")"
-summary="$(rpm -qp --queryformat '%{SUMMARY}' "$RPM_PATH")"
-contents="$(rpm -qpl "$RPM_PATH")"
+RPM_DB="$(mktemp -d)"
+trap 'rm -rf "$RPM_DB"' EXIT
+rpm_query=(rpm --dbpath "$RPM_DB")
+
+package_name="$("${rpm_query[@]}" -qp --queryformat '%{NAME}' "$RPM_PATH")"
+summary="$("${rpm_query[@]}" -qp --queryformat '%{SUMMARY}' "$RPM_PATH")"
+contents="$("${rpm_query[@]}" -qpl "$RPM_PATH")"
 
 required_paths=(
   "/usr/bin/warder"
