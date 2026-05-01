@@ -87,6 +87,7 @@ pub fn is_builtin_denied_path(path: &Path) -> bool {
         .components()
         .map(|component| component.as_os_str().to_string_lossy().to_lowercase())
         .collect::<Vec<_>>();
+    let lowered_path = path_to_slash_string(path).to_lowercase();
 
     lowered.iter().any(|part| {
         matches!(
@@ -95,26 +96,49 @@ pub fn is_builtin_denied_path(path: &Path) -> bool {
                 | ".gnupg"
                 | ".aws"
                 | ".azure"
+                | ".docker"
+                | ".gem"
                 | ".kube"
                 | ".git"
+                | ".password-store"
                 | "node_modules"
                 | "firefox"
                 | "google-chrome"
                 | "chromium"
                 | "bravesoftware"
+                | "librewolf"
+                | "microsoft-edge"
+                | "opera"
+                | "vivaldi"
         )
-    }) || lowered
-        .last()
-        .map(|name| {
-            name == ".env"
-                || name.starts_with(".env.")
-                || name.ends_with(".pem")
-                || name.ends_with(".key")
-                || name.ends_with(".p12")
-                || name.ends_with(".pfx")
-                || name.starts_with("wallet")
-        })
-        .unwrap_or(false)
+    }) || [
+        "/.config/1password/",
+        "/.config/gh/",
+        "/.config/keepassxc/",
+        "/.docker/config.json",
+        "/.gem/credentials",
+    ]
+    .iter()
+    .any(|needle| lowered_path.contains(needle))
+        || lowered_path.ends_with("/.config/1password")
+        || lowered_path.ends_with("/.config/gh")
+        || lowered_path.ends_with("/.config/keepassxc")
+        || lowered
+            .last()
+            .map(|name| {
+                name == ".env"
+                    || name.starts_with(".env.")
+                    || name == ".netrc"
+                    || name == ".npmrc"
+                    || name == ".pypirc"
+                    || name == "credentials"
+                    || name.ends_with(".pem")
+                    || name.ends_with(".key")
+                    || name.ends_with(".p12")
+                    || name.ends_with(".pfx")
+                    || name.starts_with("wallet")
+            })
+            .unwrap_or(false)
 }
 
 fn matching_rule_decision(
@@ -154,11 +178,19 @@ fn globs_match(globs: &[String], target_path: &Path) -> bool {
         return true;
     }
 
-    let Some(name) = target_path.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
+    let filename = target_path.file_name().and_then(|name| name.to_str());
+    let full_path = path_to_slash_string(target_path);
+    let trimmed_path = full_path.trim_start_matches('/');
 
-    globs.iter().any(|glob| simple_glob_match(glob, name))
+    globs.iter().any(|glob| {
+        if glob.contains('/') {
+            simple_glob_match(glob, &full_path) || simple_glob_match(glob, trimmed_path)
+        } else {
+            filename
+                .map(|name| simple_glob_match(glob, name))
+                .unwrap_or(false)
+        }
+    })
 }
 
 fn simple_glob_match(glob: &str, name: &str) -> bool {
@@ -166,10 +198,46 @@ fn simple_glob_match(glob: &str, name: &str) -> bool {
         return true;
     }
 
-    match glob.split_once('*') {
-        Some((prefix, suffix)) => name.starts_with(prefix) && name.ends_with(suffix),
-        None => glob == name,
+    if !glob.contains('*') {
+        return glob == name;
     }
+
+    let anchored_start = !glob.starts_with('*');
+    let anchored_end = !glob.ends_with('*');
+    let parts = glob.split('*').collect::<Vec<_>>();
+    let mut remainder = name;
+
+    for (index, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            continue;
+        }
+
+        if index == 0 && anchored_start {
+            let Some(next) = remainder.strip_prefix(part) else {
+                return false;
+            };
+            remainder = next;
+            continue;
+        }
+
+        let Some(position) = remainder.find(part) else {
+            return false;
+        };
+        remainder = &remainder[position + part.len()..];
+    }
+
+    if anchored_end {
+        match parts.iter().rev().find(|part| !part.is_empty()) {
+            Some(last) => name.ends_with(last),
+            None => true,
+        }
+    } else {
+        true
+    }
+}
+
+fn path_to_slash_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn is_risky_capability(capability: Capability) -> bool {
@@ -423,6 +491,45 @@ mod tests {
     }
 
     #[test]
+    fn denied_expanded_secret_paths() {
+        let root = temp_root("expanded-secrets");
+        let paths = [
+            root.join(".npmrc"),
+            root.join(".pypirc"),
+            root.join(".netrc"),
+            root.join(".password-store").join("example.gpg"),
+            root.join(".docker").join("config.json"),
+            root.join(".config").join("gh").join("hosts.yml"),
+            root.join(".config").join("1Password").join("settings.json"),
+            root.join(".config").join("keepassxc").join("keepassxc.ini"),
+            root.join(".gem").join("credentials"),
+            root.join(".config")
+                .join("vivaldi")
+                .join("Default")
+                .join("Cookies"),
+            root.join(".config").join("microsoft-edge").join("Default"),
+            root.join(".config").join("librewolf").join("profiles.ini"),
+        ];
+
+        for path in paths {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::write(&path, "secret").unwrap();
+
+            assert_eq!(
+                evaluate_policy(
+                    &agent(),
+                    &protected_zone(root.clone()),
+                    Capability::ReadFile,
+                    path
+                ),
+                PolicyDecision::Deny
+            );
+        }
+    }
+
+    #[test]
     fn write_file_returns_ask() {
         let root = temp_root("write");
         let file = root.join("notes.txt");
@@ -506,6 +613,51 @@ mod tests {
         assert_eq!(
             evaluate_policy(&agent(), &protected_zone(root), Capability::ReadFile, link),
             PolicyDecision::Deny
+        );
+    }
+
+    #[test]
+    fn path_aware_globs_match_full_paths() {
+        let root = temp_root("path-globs");
+        let src_dir = root.join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        let src_file = src_dir.join("main.rs");
+        let docs_file = root.join("docs").join("main.rs");
+        fs::create_dir_all(docs_file.parent().unwrap()).unwrap();
+        fs::write(&src_file, "fn main() {}").unwrap();
+        fs::write(&docs_file, "not source").unwrap();
+        let agent = agent();
+        let protected_zone = protected_zone(root.clone());
+        let rules = vec![PolicyRule {
+            id: "rule-1".to_string(),
+            protected_zone_id: protected_zone.id.clone(),
+            agent_id: agent.id.clone(),
+            capability: Capability::WriteFile,
+            effect: PolicyEffect::Allow,
+            path_scope: Some(root),
+            file_globs: vec!["*/src/*.rs".to_string()],
+            expires_at: None,
+        }];
+
+        assert_eq!(
+            evaluate_policy_with_rules(
+                &agent,
+                &protected_zone,
+                &rules,
+                Capability::WriteFile,
+                src_file
+            ),
+            PolicyDecision::Allow
+        );
+        assert_eq!(
+            evaluate_policy_with_rules(
+                &agent,
+                &protected_zone,
+                &rules,
+                Capability::WriteFile,
+                docs_file
+            ),
+            PolicyDecision::Ask
         );
     }
 }
