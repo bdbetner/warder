@@ -395,6 +395,7 @@ pub fn load_snapshot_manifest(
     snapshot_root: impl AsRef<Path>,
     snapshot_id: &str,
 ) -> Result<SnapshotManifest, SnapshotError> {
+    validate_snapshot_id(snapshot_id)?;
     let manifest_path = snapshot_root
         .as_ref()
         .join(snapshot_id)
@@ -413,6 +414,25 @@ pub fn load_snapshot_manifest(
             manifest_path.display()
         ),
     })
+}
+
+pub fn validate_snapshot_id(snapshot_id: &str) -> Result<(), SnapshotError> {
+    if snapshot_id.is_empty() {
+        return Err(SnapshotError {
+            message: "invalid snapshot id: snapshot id must not be empty".to_string(),
+        });
+    }
+    if !snapshot_id
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err(SnapshotError {
+            message: format!(
+                "invalid snapshot id '{snapshot_id}': only ASCII letters, digits, '-' and '_' are allowed"
+            ),
+        });
+    }
+    Ok(())
 }
 
 fn snapshot_backend_label(backend: &SnapshotBackend) -> &'static str {
@@ -670,6 +690,30 @@ mod tests {
 
         assert!(error.message.contains("snapshot manifest unavailable"));
         assert!(error.message.contains("missing"));
+    }
+
+    #[test]
+    fn load_snapshot_manifest_rejects_invalid_snapshot_ids_before_path_join() {
+        let snapshot_root = temp_snapshot_root("invalid-snapshot-id");
+        for snapshot_id in ["", "../escape", "nested/snap", "/tmp/snap", "snap.1"] {
+            let error = load_snapshot_manifest(&snapshot_root, snapshot_id).unwrap_err();
+
+            assert!(error.message.contains("invalid snapshot id"));
+        }
+    }
+
+    #[test]
+    fn btrfs_snapshot_driver_rejects_invalid_snapshot_ids_before_restore() {
+        let snapshot_root = temp_snapshot_root("restore-invalid-snapshot-id");
+        let driver = BtrfsSnapshotDriver::new(snapshot_root, RecordingCommandRunner::default());
+
+        let error = driver
+            .restore_snapshot(&SnapshotRestoreRequest {
+                snapshot_id: "../escape".to_string(),
+            })
+            .unwrap_err();
+
+        assert!(error.message.contains("invalid snapshot id"));
     }
 
     #[test]
