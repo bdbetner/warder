@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use warder_cli::{
     assess_host_readiness, environment_support_from_probe, known_agent_profile_catalog,
@@ -10,6 +10,11 @@ use warder_cli::{
 use warder_core::{SessionRecord, SessionStatus};
 use warder_gui_support::config::{render_gui_config_toml, GuiConfigDraft};
 use warder_gui_support::defaults::{recommended_protections, RecommendedProtection};
+
+const MAX_DESKTOP_COMMAND_ARGS: usize = 64;
+const MAX_DESKTOP_COMMAND_ARG_BYTES: usize = 4096;
+const MAX_DESKTOP_SESSION_ID_BYTES: usize = 128;
+const MAX_RECENT_SESSION_LIMIT: usize = 200;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LaunchRequest {
@@ -135,6 +140,7 @@ fn resolve_template_path(path: &str, home: &str, cwd: &str) -> String {
 }
 
 pub fn save_gui_config_file(config_path: PathBuf, draft: GuiConfigDraft) -> Result<(), String> {
+    validate_desktop_path(&config_path, "config path")?;
     let rendered = render_gui_config_toml(&draft)?;
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent)
@@ -153,6 +159,8 @@ pub fn render_dry_run_text(
     agent_id: String,
     command: Vec<String>,
 ) -> Result<String, String> {
+    validate_desktop_path(&config_path, "config path")?;
+    validate_desktop_command(&command)?;
     let environment = environment_support_from_probe(warder_daemon::probe_current_host());
     render_dry_run_from_config(Some(config_path), &agent_id, &command, &environment)
         .map_err(|error| error.message)
@@ -172,6 +180,8 @@ pub fn render_session_receipt_text(
     db_path: Option<PathBuf>,
     session_id: String,
 ) -> Result<String, String> {
+    validate_optional_desktop_path(db_path.as_ref(), "database path")?;
+    validate_desktop_session_id(&session_id)?;
     render_session_receipt_from_db(db_path, &session_id).map_err(|error| error.message)
 }
 
@@ -179,6 +189,8 @@ pub fn render_session_journals_text(
     db_path: Option<PathBuf>,
     session_id: String,
 ) -> Result<String, String> {
+    validate_optional_desktop_path(db_path.as_ref(), "database path")?;
+    validate_desktop_session_id(&session_id)?;
     render_all_journals_from_db(db_path, Some(&session_id)).map_err(|error| error.message)
 }
 
@@ -186,6 +198,8 @@ pub fn list_recent_sessions(
     db_path: PathBuf,
     limit: usize,
 ) -> Result<Vec<RecentSessionSummary>, String> {
+    validate_desktop_path(&db_path, "database path")?;
+    let limit = limit.min(MAX_RECENT_SESSION_LIMIT);
     let db = warder_db::WarderDb::open(db_path).map_err(|error| format!("{error:?}"))?;
     db.migrate().map_err(|error| format!("{error:?}"))?;
     let mut sessions = db.list_sessions().map_err(|error| format!("{error:?}"))?;
@@ -214,16 +228,18 @@ pub fn list_recent_sessions(
     Ok(summaries)
 }
 
-pub fn build_launch_command_args(request: LaunchRequest) -> Vec<String> {
-    build_cli_run_command(
+pub fn build_launch_command_args(request: LaunchRequest) -> Result<Vec<String>, String> {
+    validate_launch_request(&request)?;
+    Ok(build_cli_run_command(
         request.config_path,
         request.db_path,
         request.agent_id,
         request.command,
-    )
+    ))
 }
 
 pub fn launch_session(request: LaunchRequest) -> Result<LaunchSessionResult, String> {
+    validate_launch_request(&request)?;
     let environment = environment_support_from_probe(warder_daemon::probe_current_host());
     let command = CliCommand::Run {
         config: Some(request.config_path),
@@ -245,6 +261,72 @@ pub fn launch_session(request: LaunchRequest) -> Result<LaunchSessionResult, Str
         validation_warnings: outcome.validation_warnings,
         receipt,
     })
+}
+
+fn validate_launch_request(request: &LaunchRequest) -> Result<(), String> {
+    validate_desktop_path(&request.config_path, "config path")?;
+    validate_desktop_path(&request.db_path, "database path")?;
+    validate_desktop_token(&request.agent_id, "agent id")?;
+    validate_desktop_command(&request.command)
+}
+
+fn validate_optional_desktop_path(path: Option<&PathBuf>, label: &str) -> Result<(), String> {
+    match path {
+        Some(path) => validate_desktop_path(path, label),
+        None => Ok(()),
+    }
+}
+
+fn validate_desktop_path(path: &Path, label: &str) -> Result<(), String> {
+    if !path.is_absolute() {
+        return Err(format!("{label} must be absolute"));
+    }
+    if path.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir | std::path::Component::CurDir
+        )
+    }) {
+        return Err(format!("{label} must not contain traversal components"));
+    }
+    Ok(())
+}
+
+fn validate_desktop_session_id(session_id: &str) -> Result<(), String> {
+    validate_desktop_token(session_id, "session id")
+}
+
+fn validate_desktop_token(value: &str, label: &str) -> Result<(), String> {
+    if value.is_empty() || value.len() > MAX_DESKTOP_SESSION_ID_BYTES {
+        return Err(format!("{label} length is invalid"));
+    }
+    if !value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
+        return Err(format!("{label} contains unsupported characters"));
+    }
+    Ok(())
+}
+
+fn validate_desktop_command(command: &[String]) -> Result<(), String> {
+    if command.is_empty() {
+        return Err("command must not be empty".to_string());
+    }
+    if command.len() > MAX_DESKTOP_COMMAND_ARGS {
+        return Err(format!(
+            "command has too many arguments; maximum is {MAX_DESKTOP_COMMAND_ARGS}"
+        ));
+    }
+    if command
+        .iter()
+        .any(|argument| argument.is_empty() || argument.len() > MAX_DESKTOP_COMMAND_ARG_BYTES)
+    {
+        return Err(format!(
+            "command arguments must be non-empty and at most {MAX_DESKTOP_COMMAND_ARG_BYTES} bytes"
+        ));
+    }
+    Ok(())
 }
 
 pub fn build_cli_run_command(
@@ -357,7 +439,7 @@ fn host_readiness_summary() -> Result<HostReadinessSummary, String> {
 }
 
 #[tauri::command]
-fn build_launch_command(request: LaunchRequest) -> Vec<String> {
+fn build_launch_command(request: LaunchRequest) -> Result<Vec<String>, String> {
     build_launch_command_args(request)
 }
 

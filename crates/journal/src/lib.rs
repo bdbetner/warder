@@ -1713,12 +1713,7 @@ fn read_procfs_socket_inodes(
     let fd_dir = proc_root.join(pid.to_string()).join("fd");
     let entries = match std::fs::read_dir(&fd_dir) {
         Ok(entries) => entries,
-        Err(error)
-            if matches!(
-                error.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
-            ) =>
-        {
+        Err(error) if is_quiet_procfs_read_error(&error) => {
             return Ok(BTreeSet::new());
         }
         Err(error) => {
@@ -1739,12 +1734,7 @@ fn read_procfs_socket_inodes(
         })?;
         let target = match std::fs::read_link(entry.path()) {
             Ok(target) => target,
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
-                ) =>
-            {
+            Err(error) if is_quiet_procfs_read_error(&error) => {
                 continue;
             }
             Err(error) => {
@@ -1783,12 +1773,7 @@ fn read_procfs_descendant_pids(
 ) -> Result<BTreeSet<u32>, FileJournalWatchError> {
     let entries = match std::fs::read_dir(proc_root) {
         Ok(entries) => entries,
-        Err(error)
-            if matches!(
-                error.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
-            ) =>
-        {
+        Err(error) if is_quiet_procfs_read_error(&error) => {
             return Ok(BTreeSet::from([root_pid]));
         }
         Err(error) => {
@@ -1832,12 +1817,7 @@ fn read_procfs_descendant_pids(
 fn read_procfs_parent_pid(stat_path: &Path) -> Result<Option<u32>, FileJournalWatchError> {
     let contents = match std::fs::read_to_string(stat_path) {
         Ok(contents) => contents,
-        Err(error)
-            if matches!(
-                error.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
-            ) =>
-        {
+        Err(error) if is_quiet_procfs_read_error(&error) => {
             return Ok(None);
         }
         Err(error) => {
@@ -1874,12 +1854,7 @@ fn read_procfs_network_table(
 ) -> Result<Vec<ProcfsNetworkTableEntry>, FileJournalWatchError> {
     let contents = match std::fs::read_to_string(path) {
         Ok(contents) => contents,
-        Err(error)
-            if matches!(
-                error.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
-            ) =>
-        {
+        Err(error) if is_quiet_procfs_read_error(&error) => {
             return Ok(Vec::new());
         }
         Err(error) => {
@@ -1890,6 +1865,14 @@ fn read_procfs_network_table(
         }
     };
     Ok(parse_procfs_network_table(&contents, protocol))
+}
+
+#[cfg(target_os = "linux")]
+fn is_quiet_procfs_read_error(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+    ) || error.raw_os_error() == Some(3)
 }
 
 #[cfg(target_os = "linux")]

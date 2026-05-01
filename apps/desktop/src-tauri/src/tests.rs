@@ -1,6 +1,6 @@
 use crate::{
     build_cli_run_command, host_readiness, launch_session, list_recent_sessions,
-    load_profile_templates_for_context, load_recommended_protections_for_home,
+    load_profile_templates_for_context, load_recommended_protections_for_home, render_dry_run_text,
     render_session_journals_text, render_session_receipt_text, save_gui_config_file, LaunchRequest,
 };
 use std::path::PathBuf;
@@ -69,6 +69,44 @@ fn build_cli_run_command_includes_launch_and_db() {
             "--yolo"
         ]
     );
+}
+
+#[test]
+fn desktop_commands_reject_traversal_paths_and_oversized_commands() {
+    let error = render_dry_run_text(
+        PathBuf::from("relative.toml"),
+        "local-agent".to_string(),
+        vec!["sh".to_string()],
+    )
+    .unwrap_err();
+    assert!(error.contains("config path must be absolute"));
+
+    let error = render_dry_run_text(
+        PathBuf::from("/tmp/../tmp/warder.toml"),
+        "local-agent".to_string(),
+        vec!["sh".to_string()],
+    )
+    .unwrap_err();
+    assert!(error.contains("config path must not contain traversal"));
+
+    let error = render_dry_run_text(
+        PathBuf::from("/tmp/warder.toml"),
+        "local-agent".to_string(),
+        vec!["sh".to_string(); 65],
+    )
+    .unwrap_err();
+    assert!(error.contains("too many arguments"));
+}
+
+#[test]
+fn desktop_receipt_reader_rejects_invalid_session_ids() {
+    let error = render_session_receipt_text(
+        Some(PathBuf::from("/tmp/warder.sqlite3")),
+        "../session".to_string(),
+    )
+    .unwrap_err();
+
+    assert!(error.contains("session id contains unsupported characters"));
 }
 
 #[test]

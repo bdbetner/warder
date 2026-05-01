@@ -426,7 +426,7 @@ fn usage_centers_no_daemon_run_workflow() {
             "recovery: warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]"
         ));
     assert!(usage.contains(
-            "inspect: warder receipt [--db <path>] --session <id> [--format text|json] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status"
+            "inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>] [--verify-signature <hex>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status"
         ));
     assert!(usage.contains("daemon optional"));
 }
@@ -702,6 +702,8 @@ fn parses_receipt_command_with_default_text_format() {
             db: None,
             session_id: "session-1".to_string(),
             format: ReceiptFormat::Text,
+            signing_key_file: None,
+            verify_signature: None,
         }
     );
 }
@@ -724,6 +726,34 @@ fn parses_receipt_command_with_db_and_json_format() {
             db: Some(PathBuf::from("/tmp/warder.sqlite3")),
             session_id: "session-1".to_string(),
             format: ReceiptFormat::Json,
+            signing_key_file: None,
+            verify_signature: None,
+        }
+    );
+}
+
+#[test]
+fn parses_receipt_command_with_signing_options() {
+    assert_eq!(
+        parse_args([
+            "warder",
+            "receipt",
+            "--db",
+            "/tmp/warder.sqlite3",
+            "--session",
+            "session-1",
+            "--signing-key-file",
+            "/tmp/warder.key",
+            "--verify-signature",
+            "abc123",
+        ])
+        .unwrap(),
+        CliCommand::Receipt {
+            db: Some(PathBuf::from("/tmp/warder.sqlite3")),
+            session_id: "session-1".to_string(),
+            format: ReceiptFormat::Text,
+            signing_key_file: Some(PathBuf::from("/tmp/warder.key")),
+            verify_signature: Some("abc123".to_string()),
         }
     );
 }
@@ -4056,6 +4086,102 @@ fn render_session_receipt_from_db_supports_json_format() {
         parsed["recovery_actions"][0]["reason"],
         "protected-zone file activity was recorded"
     );
+}
+
+#[test]
+fn render_session_receipt_from_db_can_sign_and_verify_text_receipts() {
+    let db_path = temp_file("warder-cli-receipt-signing-db", "sqlite3");
+    let key_path = temp_file("warder-cli-receipt-signing-key", "key");
+    std::fs::write(&key_path, b"0123456789abcdef0123456789abcdef").unwrap();
+    let db = WarderDb::open(&db_path).unwrap();
+    db.migrate().unwrap();
+    db.create_session(&receipt_test_session()).unwrap();
+
+    let signed = render_session_receipt_from_db_with_options(
+        Some(db_path.clone()),
+        "session-1",
+        ReceiptFormat::Text,
+        Some(&key_path),
+        None,
+    )
+    .unwrap();
+    let signature = signed
+        .lines()
+        .find_map(|line| line.strip_prefix("- value: "))
+        .expect("signature value");
+    let verified = render_session_receipt_from_db_with_options(
+        Some(db_path.clone()),
+        "session-1",
+        ReceiptFormat::Text,
+        Some(&key_path),
+        Some(signature),
+    )
+    .unwrap();
+
+    assert!(signed.contains("receipt signature:"));
+    assert!(verified.contains("signature verification: ok"));
+
+    let _ = std::fs::remove_file(db_path);
+    let _ = std::fs::remove_file(key_path);
+}
+
+#[test]
+fn render_session_receipt_from_db_rejects_bad_signature() {
+    let db_path = temp_file("warder-cli-receipt-bad-signing-db", "sqlite3");
+    let key_path = temp_file("warder-cli-receipt-bad-signing-key", "key");
+    std::fs::write(&key_path, b"0123456789abcdef0123456789abcdef").unwrap();
+    let db = WarderDb::open(&db_path).unwrap();
+    db.migrate().unwrap();
+    db.create_session(&receipt_test_session()).unwrap();
+
+    let error = render_session_receipt_from_db_with_options(
+        Some(db_path.clone()),
+        "session-1",
+        ReceiptFormat::Text,
+        Some(&key_path),
+        Some("00"),
+    )
+    .unwrap_err();
+
+    assert_eq!(error.message, "receipt signature verification failed");
+
+    let _ = std::fs::remove_file(db_path);
+    let _ = std::fs::remove_file(key_path);
+}
+
+#[test]
+fn persist_file_journal_events_records_dropped_event_degraded_reason() {
+    let db_path = temp_file("warder-cli-journal-limit-db", "sqlite3");
+    let db = WarderDb::open(&db_path).unwrap();
+    db.migrate().unwrap();
+    db.create_session(&receipt_test_session()).unwrap();
+    let events = (0..(MAX_JOURNAL_EVENTS_PER_DRAIN + 1))
+        .map(|index| warder_journal::FileJournalEvent {
+            session_id: "session-1".to_string(),
+            timestamp: fixed_time() + Duration::from_secs(index as u64),
+            process_id: None,
+            protected_zone_id: Some("notes".to_string()),
+            path: PathBuf::from(format!("/tmp/notes/file-{index}.md")),
+            operation: warder_journal::FileOperation::Write,
+            decision: warder_journal::FileDecision::Observed,
+            source: warder_journal::JournalSource::Inotify,
+            confidence: warder_journal::JournalConfidence::Observed,
+            attribution: warder_journal::JournalAttribution::SessionWindow,
+            message: "file activity observed by inotify".to_string(),
+        })
+        .collect::<Vec<_>>();
+
+    persist_file_journal_events_with_limit(&db_path, "session-1", events, "inotify").unwrap();
+
+    let stored = db.list_file_journal_events(Some("session-1")).unwrap();
+    let session = db.get_session("session-1").unwrap().unwrap();
+    assert_eq!(stored.len(), MAX_JOURNAL_EVENTS_PER_DRAIN);
+    assert!(session
+        .degraded_reasons
+        .iter()
+        .any(|reason| reason.contains("inotify file journal dropped 1 event")));
+
+    let _ = std::fs::remove_file(db_path);
 }
 
 #[test]

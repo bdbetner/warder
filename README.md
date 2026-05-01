@@ -164,7 +164,7 @@ warder init --protected-path <path> [--output <path>] [--profile <id>] [--agent-
 warder explain --config <path>
 warder dry-run --config <path> --agent <id> -- <agent command>
 warder run --config <path> --launch --agent <id> [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>
-warder receipt [--db <path>] --session <id> [--format text|json]
+warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>] [--verify-signature <hex>]
 warder journal [--db <path>] [--file|--network|--all] [--session <id>]
 warder snapshot --config <path> --session <id> --snapshot-root <path>
 warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]

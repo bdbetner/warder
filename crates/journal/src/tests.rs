@@ -502,6 +502,14 @@ fn procfs_network_socket_reader_treats_unreadable_fd_dir_as_quiet_degraded_surfa
     assert!(events.is_empty());
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn procfs_read_errors_treat_disappearing_process_as_quiet_surface() {
+    let error = std::io::Error::from_raw_os_error(3);
+
+    assert!(is_quiet_procfs_read_error(&error));
+}
+
 #[test]
 fn decodes_raw_ebpf_network_egress_record() {
     let raw = raw_ebpf_network_record(

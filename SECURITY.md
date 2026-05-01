@@ -8,7 +8,7 @@ Warder's strongest current protection is filesystem write denial for supervised 
 
 Warder only supervises commands launched through `warder run`. It does not protect against processes started outside Warder.
 
-Several security-hardening items are still open in the alpha: snapshot ids need stricter validation before restore path construction, local SQLite state needs stronger permissions and concurrency settings, session ids are not yet random, cgroup tagging can lag process spawn, and path canonicalization must be made consistent across config, policy, and enforcement planning.
+Several security-hardening items are still open in the alpha: snapshot ids need stricter validation before restore path construction, local SQLite state needs stronger permissions and concurrency settings, session ids are not yet random, cgroup tagging can lag process spawn, receipt signing still uses local shared-secret keys rather than public-key signatures, and path canonicalization must be made consistent across config, policy, and enforcement planning.
 
 ## What Warder Uses
 
@@ -31,7 +31,7 @@ Warder stores local metadata in SQLite. Warder should not upload session data or
 
 Local receipts and journals are accountability records, not tamper-proof forensics. A local user or malware with filesystem access can modify local files.
 
-Until receipt signing and stronger state-file controls are implemented, do not use Warder receipts as forensic evidence against a process that could also modify Warder's local state directory.
+Receipt signing can add local HMAC integrity checks for exported receipts when the signing key is kept outside the supervised session's write access. It does not make Warder state tamper-proof, and it is not a public-key non-repudiation mechanism. Until stronger state-file controls and key management are implemented, do not use Warder receipts as forensic evidence against a process that could also modify Warder's local state directory or receipt signing key.
 
 ## Before Relying On Warder
 

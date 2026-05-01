@@ -24,6 +24,7 @@ pub enum DbError {
     Json(serde_json::Error),
     InvalidTimestamp(i64),
     InvalidValue { field: &'static str, value: String },
+    MissingSession(String),
 }
 
 impl From<rusqlite::Error> for DbError {
@@ -271,7 +272,7 @@ impl WarderDb {
         let (landlock_status, landlock_message) = encode_landlock_status(&session.landlock_status);
         let (snapshot_status, snapshot_backend, snapshot_id, snapshot_root, snapshot_message) =
             encode_snapshot_status(&session.snapshot_status);
-        self.conn.execute(
+        let changed = self.conn.execute(
             "UPDATE sessions
              SET agent_id = ?2,
                  agent_label = ?3,
@@ -325,6 +326,9 @@ impl WarderDb {
                 encode_dependency_file_changes(&session.dependency_file_changes)?,
             ],
         )?;
+        if changed == 0 {
+            return Err(DbError::MissingSession(session.id.clone()));
+        }
         Ok(())
     }
 
@@ -473,6 +477,38 @@ impl WarderDb {
         Ok(())
     }
 
+    pub fn insert_file_journal_events(&self, events: &[FileJournalEvent]) -> DbResult<()> {
+        if events.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.conn.unchecked_transaction()?;
+        {
+            let mut statement = transaction.prepare(
+                "INSERT INTO file_journal_events (
+                    session_id, timestamp, process_id, protected_zone_id, path, operation,
+                    decision, source, confidence, attribution, message
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            )?;
+            for event in events {
+                statement.execute(params![
+                    event.session_id,
+                    encode_time(event.timestamp),
+                    event.process_id.map(|pid| pid as i64),
+                    event.protected_zone_id,
+                    path_to_string(&event.path),
+                    file_operation_to_str(event.operation),
+                    file_decision_to_str(event.decision),
+                    journal_source_to_str(event.source),
+                    journal_confidence_to_str(event.confidence),
+                    journal_attribution_to_str(event.attribution),
+                    event.message
+                ])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn list_file_journal_events(
         &self,
         session_id: Option<&str>,
@@ -526,6 +562,38 @@ impl WarderDb {
                 event.message
             ],
         )?;
+        Ok(())
+    }
+
+    pub fn insert_network_journal_events(&self, events: &[NetworkJournalEvent]) -> DbResult<()> {
+        if events.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.conn.unchecked_transaction()?;
+        {
+            let mut statement = transaction.prepare(
+                "INSERT INTO network_journal_events (
+                    session_id, timestamp, process_id, destination, destination_port, protocol,
+                    decision, source, confidence, attribution, message
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            )?;
+            for event in events {
+                statement.execute(params![
+                    event.session_id,
+                    encode_time(event.timestamp),
+                    event.process_id.map(|pid| pid as i64),
+                    event.destination,
+                    event.destination_port.map(|port| port as i64),
+                    network_protocol_to_str(&event.protocol),
+                    network_decision_to_str(event.decision),
+                    journal_source_to_str(event.source),
+                    journal_confidence_to_str(event.confidence),
+                    journal_attribution_to_str(event.attribution),
+                    event.message
+                ])?;
+            }
+        }
+        transaction.commit()?;
         Ok(())
     }
 

@@ -4,7 +4,9 @@ use std::process::ExitStatus;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant, SystemTime};
 
+use hmac::{Hmac, Mac};
 use serde::Serialize;
+use sha2::Sha256;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use warder_config::{
@@ -73,6 +75,8 @@ pub enum CliCommand {
         db: Option<PathBuf>,
         session_id: String,
         format: ReceiptFormat,
+        signing_key_file: Option<PathBuf>,
+        verify_signature: Option<String>,
     },
     Snapshot {
         session_id: String,
@@ -175,6 +179,10 @@ pub struct LaunchOutcome {
     pub exit_code: Option<i32>,
     pub validation_warnings: Vec<String>,
 }
+
+type ReceiptHmac = Hmac<Sha256>;
+
+const MAX_JOURNAL_EVENTS_PER_DRAIN: usize = 5_000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LaunchedDaemon {
@@ -362,10 +370,21 @@ pub fn command_summary(command: &CliCommand) -> String {
             ),
         },
         CliCommand::Receipt {
-            session_id, format, ..
+            session_id,
+            format,
+            signing_key_file,
+            verify_signature,
+            ..
         } => {
+            let action = if verify_signature.is_some() {
+                "receipt verification requested"
+            } else if signing_key_file.is_some() {
+                "signed receipt requested"
+            } else {
+                "receipt requested"
+            };
             format!(
-                "receipt requested for session '{session_id}' as {}",
+                "{action} for session '{session_id}' as {}",
                 receipt_format_label(*format)
             )
         }
@@ -1057,38 +1076,25 @@ pub fn render_session_receipt_json(session: &SessionRecord) -> Result<String, Cl
     })
 }
 
+fn render_structured_receipt_json(receipt: &StructuredSessionReceipt) -> Result<String, CliError> {
+    serde_json::to_string_pretty(receipt).map_err(|error| CliError {
+        message: format!("failed to render structured receipt: {error}"),
+    })
+}
+
+#[cfg(test)]
 fn render_session_receipt_json_with_activity(
     session: &SessionRecord,
     file_events: &[FileJournalEvent],
     network_events: &[NetworkJournalEvent],
     db_path: Option<&Path>,
 ) -> Result<String, CliError> {
-    let mut receipt = StructuredSessionReceipt::from(session);
-    receipt.file_activity = file_activity_summary(file_events);
-    receipt.network_activity = network_activity_summary(network_events);
-    receipt.review_guidance =
-        receipt_review_guidance(session, &receipt.file_activity, &receipt.network_activity);
-    receipt.review_actions = receipt_review_actions(
+    render_structured_receipt_json(&structured_receipt_with_activity(
         session,
-        &receipt.file_activity,
-        &receipt.network_activity,
+        file_events,
+        network_events,
         db_path,
-    );
-    receipt.recovery_guidance = receipt_recovery_guidance(
-        session,
-        &receipt.file_activity,
-        &receipt.network_activity,
-        db_path,
-    );
-    receipt.recovery_actions = receipt_recovery_actions(
-        session,
-        &receipt.file_activity,
-        &receipt.network_activity,
-        db_path,
-    );
-    serde_json::to_string_pretty(&receipt).map_err(|error| CliError {
-        message: format!("failed to render structured receipt: {error}"),
-    })
+    ))
 }
 
 #[derive(Serialize)]
@@ -1112,6 +1118,15 @@ struct StructuredSessionReceipt {
     review_actions: Vec<StructuredReviewAction>,
     recovery_guidance: Vec<String>,
     recovery_actions: Vec<StructuredRecoveryAction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signature: Option<StructuredReceiptSignature>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct StructuredReceiptSignature {
+    algorithm: &'static str,
+    payload: &'static str,
+    value: String,
 }
 
 #[derive(Serialize)]
@@ -1272,6 +1287,7 @@ impl From<&SessionRecord> for StructuredSessionReceipt {
                 &StructuredNetworkActivitySummary::empty(),
                 None,
             ),
+            signature: None,
         }
     }
 }
@@ -1332,6 +1348,16 @@ pub fn render_session_receipt_from_db_with_format(
     session_id: &str,
     format: ReceiptFormat,
 ) -> Result<String, CliError> {
+    render_session_receipt_from_db_with_options(db_path, session_id, format, None, None)
+}
+
+pub fn render_session_receipt_from_db_with_options(
+    db_path: Option<PathBuf>,
+    session_id: &str,
+    format: ReceiptFormat,
+    signing_key_file: Option<&Path>,
+    verify_signature: Option<&str>,
+) -> Result<String, CliError> {
     let explicit_db_path = db_path.clone();
     let db_path = db_path.unwrap_or_else(default_db_path);
     let db = WarderDb::open(&db_path).map_err(db_error)?;
@@ -1348,20 +1374,186 @@ pub fn render_session_receipt_from_db_with_format(
     let network_events = db
         .list_network_journal_events(Some(session_id))
         .map_err(db_error)?;
-    match format {
-        ReceiptFormat::Text => Ok(render_session_receipt_with_activity(
-            &session,
-            &file_events,
-            &network_events,
-            explicit_db_path.as_deref(),
-        )),
-        ReceiptFormat::Json => render_session_receipt_json_with_activity(
-            &session,
-            &file_events,
-            &network_events,
-            explicit_db_path.as_deref(),
-        ),
+    render_receipt_output(
+        &session,
+        &file_events,
+        &network_events,
+        explicit_db_path.as_deref(),
+        format,
+        signing_key_file,
+        verify_signature,
+    )
+}
+
+fn render_receipt_output(
+    session: &SessionRecord,
+    file_events: &[FileJournalEvent],
+    network_events: &[NetworkJournalEvent],
+    db_path: Option<&Path>,
+    format: ReceiptFormat,
+    signing_key_file: Option<&Path>,
+    verify_signature: Option<&str>,
+) -> Result<String, CliError> {
+    if verify_signature.is_some() && signing_key_file.is_none() {
+        return err("receipt verification requires --signing-key-file");
     }
+
+    let signature = match signing_key_file {
+        Some(path) => {
+            let key = read_receipt_signing_key(path)?;
+            Some(match format {
+                ReceiptFormat::Text => sign_receipt_payload(
+                    render_session_receipt_with_activity(
+                        session,
+                        file_events,
+                        network_events,
+                        db_path,
+                    )
+                    .as_bytes(),
+                    &key,
+                )?,
+                ReceiptFormat::Json => {
+                    let mut receipt = structured_receipt_with_activity(
+                        session,
+                        file_events,
+                        network_events,
+                        db_path,
+                    );
+                    receipt.signature = None;
+                    let payload = serde_json::to_vec(&receipt).map_err(|error| CliError {
+                        message: format!("failed to serialize receipt for signing: {error}"),
+                    })?;
+                    sign_receipt_payload(&payload, &key)?
+                }
+            })
+        }
+        None => None,
+    };
+
+    if let Some(expected) = verify_signature {
+        let Some(actual) = signature.as_deref() else {
+            return err("receipt verification requires --signing-key-file");
+        };
+        if !constant_time_eq_hex(actual, expected) {
+            return err("receipt signature verification failed");
+        }
+    }
+
+    let mut output = match format {
+        ReceiptFormat::Text => {
+            render_session_receipt_with_activity(session, file_events, network_events, db_path)
+        }
+        ReceiptFormat::Json => {
+            let mut receipt =
+                structured_receipt_with_activity(session, file_events, network_events, db_path);
+            if verify_signature.is_none() {
+                if let Some(signature) = signature.clone() {
+                    receipt.signature = Some(StructuredReceiptSignature {
+                        algorithm: "hmac-sha256",
+                        payload: "unsigned structured receipt",
+                        value: signature,
+                    });
+                }
+            }
+            render_structured_receipt_json(&receipt)?
+        }
+    };
+
+    match (format, signature, verify_signature) {
+        (_, _, Some(_)) => {
+            output.push_str("\nsignature verification: ok");
+        }
+        (ReceiptFormat::Text, Some(signature), None) => {
+            output.push_str("\nreceipt signature:");
+            output.push_str("\n- algorithm: hmac-sha256");
+            output.push_str("\n- payload: unsigned text receipt");
+            output.push_str(&format!("\n- value: {signature}"));
+        }
+        _ => {}
+    }
+
+    Ok(output)
+}
+
+fn structured_receipt_with_activity(
+    session: &SessionRecord,
+    file_events: &[FileJournalEvent],
+    network_events: &[NetworkJournalEvent],
+    db_path: Option<&Path>,
+) -> StructuredSessionReceipt {
+    let mut receipt = StructuredSessionReceipt::from(session);
+    receipt.file_activity = file_activity_summary(file_events);
+    receipt.network_activity = network_activity_summary(network_events);
+    receipt.review_guidance =
+        receipt_review_guidance(session, &receipt.file_activity, &receipt.network_activity);
+    receipt.review_actions = receipt_review_actions(
+        session,
+        &receipt.file_activity,
+        &receipt.network_activity,
+        db_path,
+    );
+    receipt.recovery_guidance = receipt_recovery_guidance(
+        session,
+        &receipt.file_activity,
+        &receipt.network_activity,
+        db_path,
+    );
+    receipt.recovery_actions = receipt_recovery_actions(
+        session,
+        &receipt.file_activity,
+        &receipt.network_activity,
+        db_path,
+    );
+    receipt
+}
+
+fn read_receipt_signing_key(path: &Path) -> Result<Vec<u8>, CliError> {
+    let key = std::fs::read(path).map_err(|error| CliError {
+        message: format!(
+            "failed to read receipt signing key '{}': {error}",
+            path.display()
+        ),
+    })?;
+    let key = key
+        .strip_suffix(b"\n")
+        .unwrap_or(&key)
+        .strip_suffix(b"\r")
+        .unwrap_or_else(|| key.strip_suffix(b"\r\n").unwrap_or(&key))
+        .to_vec();
+    if key.len() < 32 {
+        return err("receipt signing key must be at least 32 bytes");
+    }
+    Ok(key)
+}
+
+fn sign_receipt_payload(payload: &[u8], key: &[u8]) -> Result<String, CliError> {
+    let mut mac = ReceiptHmac::new_from_slice(key).map_err(|error| CliError {
+        message: format!("failed to initialize receipt signing key: {error}"),
+    })?;
+    mac.update(payload);
+    Ok(hex_encode(&mac.finalize().into_bytes()))
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        encoded.push(HEX[(byte >> 4) as usize] as char);
+        encoded.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    encoded
+}
+
+fn constant_time_eq_hex(left: &str, right: &str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    if left.len() != right.len() {
+        return false;
+    }
+    left.iter()
+        .zip(right.iter())
+        .fold(0u8, |acc, (left, right)| acc | (left ^ right))
+        == 0
 }
 
 pub fn render_file_journal_from_db(
@@ -1704,7 +1896,7 @@ init: warder init --protected-path <path> [--output <path>] [--profile <id>] [--
 profiles: warder profiles [--format text|json]\n\
 snapshot: warder snapshot --config <path> --session <id> --snapshot-root <path>\n\
 recovery: warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]\n\
-inspect: warder receipt [--db <path>] --session <id> [--format text|json] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status\n\
+inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>] [--verify-signature <hex>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status\n\
 daemon optional: warder start|stop"
 }
 
@@ -2266,6 +2458,8 @@ fn parse_receipt(args: Vec<String>) -> Result<CliCommand, CliError> {
     let mut db = None;
     let mut session_id = None;
     let mut format = ReceiptFormat::Text;
+    let mut signing_key_file = None;
+    let mut verify_signature = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -2281,6 +2475,18 @@ fn parse_receipt(args: Vec<String>) -> Result<CliCommand, CliError> {
                 format = parse_receipt_format(&value_after(&args, index, "--format")?)?;
                 index += 2;
             }
+            "--signing-key-file" => {
+                signing_key_file = Some(PathBuf::from(value_after(
+                    &args,
+                    index,
+                    "--signing-key-file",
+                )?));
+                index += 2;
+            }
+            "--verify-signature" => {
+                verify_signature = Some(value_after(&args, index, "--verify-signature")?);
+                index += 2;
+            }
             unknown => return err(format!("unknown receipt option '{unknown}'")),
         }
     }
@@ -2293,6 +2499,8 @@ fn parse_receipt(args: Vec<String>) -> Result<CliCommand, CliError> {
         db,
         session_id,
         format,
+        signing_key_file,
+        verify_signature,
     })
 }
 
@@ -5644,10 +5852,33 @@ fn persist_inotify_file_journal_events(
         return Ok(());
     }
 
-    let db = WarderDb::open(db_path.into()).map_err(db_error)?;
+    persist_file_journal_events_with_limit(db_path, session_id, events, "inotify")
+}
+
+fn persist_file_journal_events_with_limit(
+    db_path: impl Into<PathBuf>,
+    session_id: &str,
+    events: Vec<FileJournalEvent>,
+    source_label: &str,
+) -> Result<(), CliError> {
+    let db_path = db_path.into();
+    let dropped = events.len().saturating_sub(MAX_JOURNAL_EVENTS_PER_DRAIN);
+    let events = events
+        .into_iter()
+        .take(MAX_JOURNAL_EVENTS_PER_DRAIN)
+        .collect::<Vec<_>>();
+
+    let db = WarderDb::open(&db_path).map_err(db_error)?;
     db.migrate().map_err(db_error)?;
-    for event in events {
-        db.insert_file_journal_event(&event).map_err(db_error)?;
+    db.insert_file_journal_events(&events).map_err(db_error)?;
+    if dropped > 0 {
+        add_session_degraded_reason(
+            db_path,
+            session_id,
+            format!(
+                "{source_label} file journal dropped {dropped} event(s) after per-drain limit of {MAX_JOURNAL_EVENTS_PER_DRAIN}"
+            ),
+        )?;
     }
     Ok(())
 }
@@ -5728,12 +5959,7 @@ where
         return Ok(());
     }
 
-    let db = WarderDb::open(db_path.into()).map_err(db_error)?;
-    db.migrate().map_err(db_error)?;
-    for event in events {
-        db.insert_file_journal_event(&event).map_err(db_error)?;
-    }
-    Ok(())
+    persist_file_journal_events_with_limit(db_path, session_id, events, "eBPF")
 }
 
 fn persist_ebpf_network_journal_events<R>(
@@ -5756,10 +5982,34 @@ where
         return Ok(());
     }
 
-    let db = WarderDb::open(db_path.into()).map_err(db_error)?;
+    persist_network_journal_events_with_limit(db_path, session_id, events, "eBPF")
+}
+
+fn persist_network_journal_events_with_limit(
+    db_path: impl Into<PathBuf>,
+    session_id: &str,
+    events: Vec<NetworkJournalEvent>,
+    source_label: &str,
+) -> Result<(), CliError> {
+    let db_path = db_path.into();
+    let dropped = events.len().saturating_sub(MAX_JOURNAL_EVENTS_PER_DRAIN);
+    let events = events
+        .into_iter()
+        .take(MAX_JOURNAL_EVENTS_PER_DRAIN)
+        .collect::<Vec<_>>();
+
+    let db = WarderDb::open(&db_path).map_err(db_error)?;
     db.migrate().map_err(db_error)?;
-    for event in events {
-        db.insert_network_journal_event(&event).map_err(db_error)?;
+    db.insert_network_journal_events(&events)
+        .map_err(db_error)?;
+    if dropped > 0 {
+        add_session_degraded_reason(
+            db_path,
+            session_id,
+            format!(
+                "{source_label} network journal dropped {dropped} event(s) after per-drain limit of {MAX_JOURNAL_EVENTS_PER_DRAIN}"
+            ),
+        )?;
     }
     Ok(())
 }
@@ -5784,12 +6034,7 @@ fn persist_procfs_network_journal_events(
         return Ok(());
     }
 
-    let db = WarderDb::open(db_path.into()).map_err(db_error)?;
-    db.migrate().map_err(db_error)?;
-    for event in events {
-        db.insert_network_journal_event(&event).map_err(db_error)?;
-    }
-    Ok(())
+    persist_network_journal_events_with_limit(db_path, session_id, events, "procfs")
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

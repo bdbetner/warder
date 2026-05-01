@@ -201,8 +201,16 @@ fn main() {
             db,
             session_id,
             format,
+            signing_key_file,
+            verify_signature,
         }) => {
-            match warder_cli::render_session_receipt_from_db_with_format(db, &session_id, format) {
+            match warder_cli::render_session_receipt_from_db_with_options(
+                db,
+                &session_id,
+                format,
+                signing_key_file.as_deref(),
+                verify_signature.as_deref(),
+            ) {
                 Ok(receipt) => println!("{receipt}"),
                 Err(error) => exit_with_error(error),
             }

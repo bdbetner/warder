@@ -44,4 +44,20 @@ If a config contains `network.allowed_destinations`, receipts must not imply tha
 
 Receipts and journal output should keep these limits visible whenever network events are present or when network coverage is degraded.
 
-The journal is local accountability, not tamper-proof forensics. A process or user that can modify Warder's local state can also modify receipts and journal data until signing or another integrity mechanism is implemented.
+## Receipt Signing
+
+Receipts can be signed with a local HMAC-SHA256 key file:
+
+```bash
+warder receipt --db .warder/warder.db --session <session-id> --signing-key-file <path>
+```
+
+The key file must contain at least 32 bytes after trailing line endings are trimmed. Keep it outside any path the supervised command can write.
+
+To verify a receipt signature, render the same receipt format with the same key and pass the expected hex signature:
+
+```bash
+warder receipt --db .warder/warder.db --session <session-id> --signing-key-file <path> --verify-signature <hex>
+```
+
+This is local shared-secret integrity, not public-key non-repudiation. A process or user that can modify Warder's local state or read/write the signing key can still undermine receipt trust.

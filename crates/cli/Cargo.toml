@@ -6,8 +6,10 @@ license.workspace = true
 
 [dependencies]
 libc = "0.2"
+hmac = "0.12"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
 warder-core = { path = "../core" }
 warder-config = { path = "../config" }

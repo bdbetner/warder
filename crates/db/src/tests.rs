@@ -230,6 +230,34 @@ fn sessions_round_trip_with_cgroup_and_snapshot_state() {
 }
 
 #[test]
+fn update_session_rejects_missing_session() {
+    let store = store("missing-session-update");
+    let session = SessionRecord {
+        id: "missing-session".to_string(),
+        agent_id: "agent-1".to_string(),
+        agent_label: "Local Script".to_string(),
+        agent_profile: Some("local-script".to_string()),
+        command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+        protected_zone_ids: vec!["protected_zone-1".to_string()],
+        status: SessionStatus::Running,
+        exit_code: None,
+        started_at: timestamp(),
+        ended_at: None,
+        root_pid: Some(4242),
+        cgroup_path: None,
+        cgroup_status: CgroupStatus::Pending,
+        landlock_status: warder_core::LandlockStatus::Pending,
+        snapshot_status: SnapshotStatus::NotRequested,
+        dependency_file_changes: Vec::new(),
+        degraded_reasons: Vec::new(),
+    };
+
+    let error = store.update_session(&session).unwrap_err();
+
+    assert!(matches!(error, DbError::MissingSession(id) if id == "missing-session"));
+}
+
+#[test]
 fn file_journal_events_round_trip_by_session() {
     let store = store("file-journal-events");
     let event = FileJournalEvent {
@@ -256,6 +284,33 @@ fn file_journal_events_round_trip_by_session() {
         .list_file_journal_events(Some("missing-session"))
         .unwrap()
         .is_empty());
+}
+
+#[test]
+fn file_journal_events_bulk_insert_in_one_call() {
+    let store = store("file-journal-events-bulk");
+    let events = (0..3)
+        .map(|index| FileJournalEvent {
+            session_id: "session-1".to_string(),
+            timestamp: timestamp() + Duration::from_secs(index),
+            process_id: Some(4242),
+            protected_zone_id: Some("protected_zone-1".to_string()),
+            path: PathBuf::from(format!("/tmp/research/notes-{index}.md")),
+            operation: FileOperation::Write,
+            decision: FileDecision::Observed,
+            source: JournalSource::Inotify,
+            confidence: JournalConfidence::Observed,
+            attribution: JournalAttribution::SessionWindow,
+            message: "file activity observed by inotify".to_string(),
+        })
+        .collect::<Vec<_>>();
+
+    store.insert_file_journal_events(&events).unwrap();
+
+    assert_eq!(
+        store.list_file_journal_events(Some("session-1")).unwrap(),
+        events
+    );
 }
 
 #[test]
@@ -287,6 +342,35 @@ fn network_journal_events_round_trip_by_session() {
         .list_network_journal_events(Some("missing-session"))
         .unwrap()
         .is_empty());
+}
+
+#[test]
+fn network_journal_events_bulk_insert_in_one_call() {
+    let store = store("network-journal-events-bulk");
+    let events = (0..3)
+        .map(|index| NetworkJournalEvent {
+            session_id: "session-1".to_string(),
+            timestamp: timestamp() + Duration::from_secs(index),
+            process_id: Some(4242),
+            destination: format!("203.0.113.{index}"),
+            destination_port: Some(443),
+            protocol: NetworkProtocol::Tcp,
+            decision: NetworkDecision::Observed,
+            source: JournalSource::Procfs,
+            confidence: JournalConfidence::Observed,
+            attribution: JournalAttribution::DirectProcess,
+            message: format!("connected socket observed by procfs inode={index}"),
+        })
+        .collect::<Vec<_>>();
+
+    store.insert_network_journal_events(&events).unwrap();
+
+    assert_eq!(
+        store
+            .list_network_journal_events(Some("session-1"))
+            .unwrap(),
+        events
+    );
 }
 
 #[test]
