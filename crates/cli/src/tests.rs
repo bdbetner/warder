@@ -2965,12 +2965,13 @@ fn render_session_receipt_summarizes_enforcement_state() {
     assert!(receipt.contains("profile: codex-cli"));
     assert!(receipt.contains("status: completed"));
     assert!(receipt.contains("exit code: 0"));
-    assert!(receipt.contains("cgroup: tagged"));
+    assert!(receipt.contains("cgroup: tagged post-spawn"));
     assert!(receipt.contains("landlock: degraded: Landlock unavailable"));
     assert!(receipt.contains("snapshot: not requested"));
-    assert!(receipt.contains("degraded coverage: 1 reason(s)"));
+    assert!(receipt.contains("degraded coverage: 2 reason(s)"));
     assert!(receipt.contains("degraded reasons:"));
     assert!(receipt.contains("Landlock unavailable"));
+    assert!(receipt.contains("cgroup tagging is applied after process spawn"));
 }
 
 #[test]
@@ -2989,6 +2990,8 @@ fn render_session_receipt_uses_shared_readiness_language() {
 fn render_session_receipt_readiness_is_strong_without_blocked_or_degraded_reasons() {
     let mut session = receipt_test_session();
     session.landlock_status = warder_core::LandlockStatus::Applied;
+    session.cgroup_status = CgroupStatus::NotRequested;
+    session.cgroup_path = None;
     session.degraded_reasons.clear();
 
     let receipt = render_session_receipt(&session);
@@ -3018,6 +3021,8 @@ fn render_session_receipt_readiness_blocks_unsupported_landlock() {
     let mut session = receipt_test_session();
     session.landlock_status =
         warder_core::LandlockStatus::Unsupported("kernel ABI missing".to_string());
+    session.cgroup_status = CgroupStatus::NotRequested;
+    session.cgroup_path = None;
     session.degraded_reasons.clear();
 
     let receipt = render_session_receipt(&session);
@@ -3046,6 +3051,8 @@ fn render_session_receipt_readiness_blocks_failed_snapshot_session() {
     session.status = SessionStatus::Failed;
     session.exit_code = Some(1);
     session.snapshot_status = SnapshotStatus::Failed("Btrfs snapshots unavailable".to_string());
+    session.cgroup_status = CgroupStatus::NotRequested;
+    session.cgroup_path = None;
     session.degraded_reasons.clear();
 
     let receipt = render_session_receipt(&session);
@@ -3209,8 +3216,16 @@ fn render_session_receipt_json_is_structured() {
         parsed["readiness"]["degraded_reasons"][0],
         "Landlock unavailable"
     );
-    assert_eq!(parsed["degraded_coverage"]["total_reasons"], 1);
+    assert_eq!(parsed["degraded_coverage"]["total_reasons"], 2);
     assert_eq!(parsed["degraded_reasons"][0], "Landlock unavailable");
+    assert_eq!(
+        parsed["degraded_reasons"][1],
+        "cgroup tagging is applied after process spawn; early process attribution may be incomplete"
+    );
+    assert_eq!(
+        parsed["enforcement"]["cgroup"]["message"],
+        "cgroup tagging is applied after process spawn; early process attribution may be incomplete"
+    );
     assert_eq!(parsed["review_actions"][0]["kind"], "doctor");
     assert_eq!(parsed["review_actions"][0]["command"], "warder doctor");
     assert_eq!(parsed["review_actions"][0]["mutates"], false);
@@ -4751,6 +4766,9 @@ fn render_agent_profile_catalog_lists_transparent_presets() {
     assert!(catalog.contains("template snapshot: best-effort"));
     assert!(catalog.contains("template protected paths:"));
     assert!(catalog.contains("- SSH keys: $HOME/.ssh read=true write=true"));
+    assert!(catalog.contains("- NPM token: $HOME/.npmrc read=true write=true"));
+    assert!(catalog.contains("- Password store: $HOME/.password-store read=true write=true"));
+    assert!(catalog.contains("- Firefox profiles: $HOME/.mozilla/firefox read=true write=true"));
     assert!(catalog.contains("template writable roots: $PWD"));
 }
 
@@ -4797,11 +4815,60 @@ fn render_agent_profile_catalog_json_includes_setup_templates() {
         .unwrap()
         .iter()
         .any(|path| path["path"] == "$HOME/.ssh" && path["read"] == true && path["write"] == true));
+    assert!(codex["template"]["recommended_protected_paths"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|path| path["path"] == "$HOME/.npmrc"
+            && path["read"] == true
+            && path["write"] == true));
     assert!(codex["template"]["writable_roots"]
         .as_array()
         .unwrap()
         .iter()
         .any(|path| path == "$PWD"));
+}
+
+#[test]
+fn secret_zone_suggestions_warn_for_existing_uncovered_profile_paths() {
+    let home = PathBuf::from("/tmp/warder-home");
+    let config = WarderConfig::from_toml(
+        r#"
+            [enforcement]
+            landlock = "disabled"
+            cgroups = "disabled"
+
+            [[zones]]
+            id = "ssh"
+            name = "SSH"
+            paths = ["/tmp/warder-home/.ssh"]
+            snapshot = "disabled"
+
+            [[agents]]
+            id = "codex"
+            label = "Codex"
+            command = "codex"
+            profile = "codex-cli"
+        "#,
+    )
+    .unwrap();
+
+    let suggestions = secret_zone_suggestions(&config, Some(&home), |path| {
+        matches!(
+            path.to_str().unwrap(),
+            "/tmp/warder-home/.ssh" | "/tmp/warder-home/.npmrc" | "/tmp/warder-home/.config/gh"
+        )
+    });
+
+    assert!(!suggestions
+        .iter()
+        .any(|diagnostic| diagnostic.message.contains("SSH keys")));
+    assert!(suggestions
+        .iter()
+        .any(|diagnostic| diagnostic.message.contains("NPM token")));
+    assert!(suggestions
+        .iter()
+        .any(|diagnostic| diagnostic.message.contains("GitHub CLI credentials")));
 }
 
 #[test]

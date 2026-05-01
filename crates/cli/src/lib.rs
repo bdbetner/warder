@@ -1014,18 +1014,14 @@ fn render_session_receipt_with_activity(
     }
     lines.push(format!(
         "degraded coverage: {} reason(s)",
-        session.degraded_reasons.len()
+        session_effective_degraded_reasons(session).len()
     ));
-    if session.degraded_reasons.is_empty() {
+    let degraded_reasons = session_effective_degraded_reasons(session);
+    if degraded_reasons.is_empty() {
         lines.push("coverage degraded reasons: none".to_string());
     } else {
         lines.push("coverage degraded reasons:".to_string());
-        lines.extend(
-            session
-                .degraded_reasons
-                .iter()
-                .map(|reason| format!("- {reason}")),
-        );
+        lines.extend(degraded_reasons.iter().map(|reason| format!("- {reason}")));
     }
     let review_guidance = receipt_review_guidance(session, &file_activity, &network_activity);
     lines.push("review guidance:".to_string());
@@ -1250,9 +1246,9 @@ impl From<&SessionRecord> for StructuredSessionReceipt {
             network_activity: StructuredNetworkActivitySummary::empty(),
             readiness: StructuredReadiness::from(readiness),
             degraded_coverage: StructuredDegradedCoverage {
-                total_reasons: session.degraded_reasons.len(),
+                total_reasons: session_effective_degraded_reasons(session).len(),
             },
-            degraded_reasons: session.degraded_reasons.clone(),
+            degraded_reasons: session_effective_degraded_reasons(session),
             review_guidance: receipt_review_guidance(
                 session,
                 &StructuredFileActivitySummary::empty(),
@@ -1877,6 +1873,10 @@ pub fn apply_cgroup_tag_result(
         CgroupTagStatus::Tagged => {
             session.cgroup_path = result.cgroup_path;
             session.cgroup_status = CgroupStatus::Tagged;
+            push_unique(
+                &mut session.degraded_reasons,
+                cgroup_post_spawn_attribution_warning().to_string(),
+            );
         }
         CgroupTagStatus::Unsupported(message) => {
             session.cgroup_path = None;
@@ -2817,7 +2817,83 @@ fn append_agent_command_diagnostics(
             }),
         }
     }
+    append_secret_zone_diagnostics(report, &config);
     Ok(())
+}
+
+fn append_secret_zone_diagnostics(report: &mut HostDoctorReport, config: &WarderConfig) {
+    report.diagnostics.extend(secret_zone_suggestions(
+        config,
+        std::env::var_os("HOME").map(PathBuf::from).as_deref(),
+        |path| path.exists(),
+    ));
+}
+
+fn secret_zone_suggestions<F>(
+    config: &WarderConfig,
+    home: Option<&Path>,
+    exists: F,
+) -> Vec<HostDiagnostic>
+where
+    F: Fn(&Path) -> bool,
+{
+    let protected_paths = config
+        .zones
+        .iter()
+        .flat_map(|zone| zone.paths.iter())
+        .collect::<Vec<_>>();
+    let mut diagnostics = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for agent in &config.agents {
+        let Some(profile) =
+            effective_agent_profile_for_run(agent.profile.as_deref(), &agent.command, &[])
+        else {
+            continue;
+        };
+
+        for template in recommended_profile_paths(&profile) {
+            let Some(path) = expand_profile_template_path(template.path, home) else {
+                continue;
+            };
+            if !exists(&path) || is_path_covered_by_any_zone(&path, &protected_paths) {
+                continue;
+            }
+            if !seen.insert(path.clone()) {
+                continue;
+            }
+
+            diagnostics.push(HostDiagnostic {
+                label: "secret-zone suggestion".to_string(),
+                status: HostDiagnosticStatus::Warning,
+                message: format!(
+                    "{} exists at {}, but no protected zone covers it",
+                    template.label,
+                    path.display()
+                ),
+            });
+        }
+    }
+
+    diagnostics
+}
+
+fn expand_profile_template_path(path: &str, home: Option<&Path>) -> Option<PathBuf> {
+    if let Some(rest) = path.strip_prefix("$HOME/") {
+        home.map(|home| home.join(rest))
+    } else if path == "$HOME" {
+        home.map(PathBuf::from)
+    } else if path.starts_with('$') {
+        None
+    } else {
+        Some(PathBuf::from(path))
+    }
+}
+
+fn is_path_covered_by_any_zone(path: &Path, zones: &[&PathBuf]) -> bool {
+    zones
+        .iter()
+        .any(|zone| path == zone.as_path() || path.starts_with(zone.as_path()))
 }
 
 fn declared_command_executable(command: &str) -> Option<String> {
@@ -2948,7 +3024,7 @@ fn host_diagnostic_status_label(status: HostDiagnosticStatus) -> &'static str {
 
 fn assess_session_readiness(session: &SessionRecord) -> HostReadinessReport {
     let mut blocked_reasons = Vec::new();
-    let mut degraded_reasons = session.degraded_reasons.clone();
+    let mut degraded_reasons = session_effective_degraded_reasons(session);
 
     match &session.cgroup_status {
         CgroupStatus::Unsupported(reason) => {
@@ -2998,6 +3074,21 @@ fn assess_session_readiness(session: &SessionRecord) -> HostReadinessReport {
         blocked_reasons,
         degraded_reasons,
     }
+}
+
+fn session_effective_degraded_reasons(session: &SessionRecord) -> Vec<String> {
+    let mut reasons = session.degraded_reasons.clone();
+    if matches!(session.cgroup_status, CgroupStatus::Tagged) {
+        push_unique(
+            &mut reasons,
+            cgroup_post_spawn_attribution_warning().to_string(),
+        );
+    }
+    reasons
+}
+
+fn cgroup_post_spawn_attribution_warning() -> &'static str {
+    "cgroup tagging is applied after process spawn; early process attribution may be incomplete"
 }
 
 pub fn assess_environment_readiness(environment: &EnvironmentSupport) -> HostReadinessReport {
@@ -3131,8 +3222,8 @@ fn cgroup_status_label(status: &CgroupStatus, path: Option<&PathBuf>) -> String 
         CgroupStatus::NotRequested => "not requested".to_string(),
         CgroupStatus::Pending => "pending".to_string(),
         CgroupStatus::Tagged => match path {
-            Some(path) => format!("tagged ({})", path.display()),
-            None => "tagged".to_string(),
+            Some(path) => format!("tagged post-spawn ({})", path.display()),
+            None => "tagged post-spawn".to_string(),
         },
         CgroupStatus::Degraded(message) => format!("degraded: {message}"),
         CgroupStatus::Unsupported(message) => format!("unsupported: {message}"),
@@ -3160,7 +3251,7 @@ fn structured_cgroup_status(
         },
         CgroupStatus::Tagged => StructuredReceiptStatus {
             status: "tagged",
-            message: None,
+            message: Some(cgroup_post_spawn_attribution_warning().to_string()),
             path: path.map(|path| path.display().to_string()),
             backend: None,
             snapshot_id: None,
@@ -3625,18 +3716,55 @@ fn recommended_profile_paths(profile: &str) -> Vec<AgentProfileProtectedPathTemp
     match profile {
         "codex-cli" | "claude-code" | "goose-cli" => vec![
             protected_path_template("SSH keys", "$HOME/.ssh", true, true),
-            protected_path_template("Shell credentials", "$HOME/.config", true, false),
+            protected_path_template("GnuPG keys", "$HOME/.gnupg", true, true),
+            protected_path_template("GitHub CLI credentials", "$HOME/.config/gh", true, true),
+            protected_path_template("1Password CLI state", "$HOME/.config/op", true, true),
+            protected_path_template("AWS credentials", "$HOME/.aws", true, true),
+            protected_path_template("Azure credentials", "$HOME/.azure", true, true),
+            protected_path_template("Kubernetes credentials", "$HOME/.kube", true, true),
+            protected_path_template("Docker credentials", "$HOME/.docker", true, true),
+            protected_path_template("NPM token", "$HOME/.npmrc", true, true),
+            protected_path_template("Python package token", "$HOME/.pypirc", true, true),
+            protected_path_template("Netrc credentials", "$HOME/.netrc", true, true),
+            protected_path_template("RubyGems credentials", "$HOME/.gem/credentials", true, true),
+            protected_path_template("Password store", "$HOME/.password-store", true, true),
+            protected_path_template(
+                "1Password desktop state",
+                "$HOME/.config/1Password",
+                true,
+                true,
+            ),
+            protected_path_template("KeePassXC state", "$HOME/.config/keepassxc", true, true),
+            protected_path_template("Local keyrings", "$HOME/.local/share/keyrings", true, true),
+            protected_path_template("Firefox profiles", "$HOME/.mozilla/firefox", true, true),
+            protected_path_template("Chrome profiles", "$HOME/.config/google-chrome", true, true),
+            protected_path_template("Chromium profiles", "$HOME/.config/chromium", true, true),
+            protected_path_template("Brave profiles", "$HOME/.config/BraveSoftware", true, true),
             protected_path_template("User notes", "$HOME/notes", true, true),
         ],
         "openclaw-cli" | "openclaw-gateway" | "openclaw-agent" => vec![
             protected_path_template("SSH keys", "$HOME/.ssh", true, true),
-            protected_path_template("Cloud credentials", "$HOME/.config", true, false),
+            protected_path_template("GnuPG keys", "$HOME/.gnupg", true, true),
+            protected_path_template("GitHub CLI credentials", "$HOME/.config/gh", true, true),
+            protected_path_template("AWS credentials", "$HOME/.aws", true, true),
+            protected_path_template("Azure credentials", "$HOME/.azure", true, true),
+            protected_path_template("Kubernetes credentials", "$HOME/.kube", true, true),
+            protected_path_template("Docker credentials", "$HOME/.docker", true, true),
+            protected_path_template("NPM token", "$HOME/.npmrc", true, true),
+            protected_path_template("Python package token", "$HOME/.pypirc", true, true),
+            protected_path_template("Netrc credentials", "$HOME/.netrc", true, true),
+            protected_path_template("Password store", "$HOME/.password-store", true, true),
+            protected_path_template("Local keyrings", "$HOME/.local/share/keyrings", true, true),
             protected_path_template("User notes", "$HOME/notes", true, true),
             protected_path_template("User documents", "$HOME/Documents", true, true),
             protected_path_template("OpenClaw state", "$HOME/.openclaw", true, false),
         ],
         "local-script" => vec![
             protected_path_template("SSH keys", "$HOME/.ssh", true, true),
+            protected_path_template("GnuPG keys", "$HOME/.gnupg", true, true),
+            protected_path_template("GitHub CLI credentials", "$HOME/.config/gh", true, true),
+            protected_path_template("NPM token", "$HOME/.npmrc", true, true),
+            protected_path_template("Netrc credentials", "$HOME/.netrc", true, true),
             protected_path_template("User notes", "$HOME/notes", true, true),
         ],
         _ => vec![protected_path_template(
@@ -4345,6 +4473,12 @@ fn receipt_review_guidance(
     } else if has_degraded_journal_coverage(session) {
         guidance.push(
             "File activity may be incomplete because journal coverage degraded; do not treat a quiet journal as proof that protected zones were untouched."
+                .to_string(),
+        );
+    }
+    if matches!(session.cgroup_status, CgroupStatus::Tagged) {
+        guidance.push(
+            "Cgroup tagging is currently applied after spawn, so early process attribution can be incomplete even when Landlock was installed in the child setup path."
                 .to_string(),
         );
     }

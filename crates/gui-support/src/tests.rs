@@ -6,7 +6,10 @@ use crate::defaults::{
 #[test]
 fn sensitive_user_paths_default_to_read_and_write_when_present() {
     let protections = recommended_protections_with_checker("/home/alex", |path| {
-        matches!(path, "/home/alex/.ssh" | "/home/alex/.gnupg")
+        matches!(
+            path,
+            "/home/alex/.ssh" | "/home/alex/.gnupg" | "/home/alex/.npmrc"
+        )
     });
 
     let ssh = protections
@@ -24,6 +27,15 @@ fn sensitive_user_paths_default_to_read_and_write_when_present() {
         .expect("aws recommendation");
     assert!(!missing_aws.exists);
     assert!(!missing_aws.enabled_by_default);
+
+    let npm = protections
+        .iter()
+        .find(|item| item.path == "/home/alex/.npmrc")
+        .expect("npm recommendation");
+    assert_eq!(npm.kind, RecommendedProtectionKind::SensitiveUser);
+    assert_eq!(npm.access, ProtectionAccess::ReadWrite);
+    assert!(npm.exists);
+    assert!(npm.enabled_by_default);
 }
 
 #[test]
