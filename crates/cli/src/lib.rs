@@ -1784,6 +1784,7 @@ pub fn create_run_session(
             push_unique(&mut validation_warnings, message);
         }
     }
+    append_non_enforcing_network_policy_warning(&config, &mut validation_warnings);
     let session = SessionRecord {
         id: session_id.clone(),
         agent_id: agent_config.id.clone(),
@@ -3253,6 +3254,15 @@ fn network_journal_label(config: &WarderConfig, environment: &EnvironmentSupport
     }
 }
 
+fn append_non_enforcing_network_policy_warning(config: &WarderConfig, warnings: &mut Vec<String>) {
+    if !config.network.allowed_destinations.is_empty() {
+        push_unique(
+            warnings,
+            "network.allowed_destinations is configured, but Warder does not enforce destination allowlists yet; current network policy is observation-only".to_string(),
+        );
+    }
+}
+
 fn planned_ebpf_network_journal_attach(
     config: &WarderConfig,
     environment: &EnvironmentSupport,
@@ -3393,6 +3403,7 @@ fn render_policy_explain(config: &WarderConfig, environment: &EnvironmentSupport
             push_unique(&mut warnings, message);
         }
     }
+    append_non_enforcing_network_policy_warning(config, &mut warnings);
     append_snapshot_plan_validation(&snapshot_plan, &mut errors, &mut warnings);
     if errors.is_empty() && warnings.is_empty() {
         lines.push("validation: ok".to_string());
