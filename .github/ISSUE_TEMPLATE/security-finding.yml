@@ -1,0 +1,54 @@
+name: Security finding
+description: Report a Warder security concern that is safe to discuss publicly.
+title: "[security]: "
+labels:
+  - security
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, private paths, or exploit details that should be handled privately. For sensitive reports, follow `SECURITY.md`.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Landlock/write blocking
+        - Cgroup/process attribution
+        - Receipts/journals
+        - Snapshot/revert
+        - Desktop/Tauri IPC
+        - Packaging/release verification
+        - Documentation/public claims
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: release
+    attributes:
+      label: Release or commit
+      placeholder: v0.1.0-alpha.11 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is the security concern?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction notes
+      description: Include safe, minimal steps when possible.
+  - type: textarea
+    id: impact
+    attributes:
+      label: Expected impact
+      description: What could a local agent or local process do because of this?
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Suggested mitigation
+      description: Optional fix, test, or documentation change.

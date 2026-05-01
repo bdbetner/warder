@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Alpha reviewer guide
+    url: https://github.com/betnbd/warder/blob/main/docs/reviewer-feedback.md
+    about: Start here before filing release-artifact feedback.
+  - name: Security policy
+    url: https://github.com/betnbd/warder/blob/main/SECURITY.md
+    about: Use this for security-reporting guidance.
