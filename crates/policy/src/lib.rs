@@ -199,8 +199,8 @@ fn has_parent_traversal(path: &Path) -> bool {
 }
 
 fn normalized_existing_or_lexical(path: &Path) -> Option<PathBuf> {
-    if path.exists() {
-        return path.canonicalize().ok();
+    if let Ok(canonical) = path.canonicalize() {
+        return Some(canonical);
     }
 
     if !path.is_absolute() {
