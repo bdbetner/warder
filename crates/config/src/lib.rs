@@ -399,6 +399,22 @@ fn warn_if_zones_overlap(
 }
 
 fn is_whole_home_path(path: &Path) -> bool {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    is_whole_home_path_with_home(path, home.as_deref())
+}
+
+fn is_whole_home_path_with_home(path: &Path, home: Option<&Path>) -> bool {
+    if home
+        .filter(|home| home.is_absolute() && path == *home)
+        .is_some()
+    {
+        return true;
+    }
+
+    if path == Path::new("/root") {
+        return true;
+    }
+
     let components = path
         .components()
         .map(|component| component.as_os_str().to_string_lossy().to_string())
@@ -599,6 +615,20 @@ agents:
             .iter()
             .any(|issue| issue.severity == ConfigIssueSeverity::Warning
                 && issue.message.contains("whole-home")));
+    }
+
+    #[test]
+    fn whole_home_detection_covers_root_and_custom_home() {
+        assert!(is_whole_home_path_with_home(Path::new("/root"), None));
+        assert!(is_whole_home_path_with_home(
+            Path::new("/srv/users/ben"),
+            Some(Path::new("/srv/users/ben"))
+        ));
+        assert!(is_whole_home_path_with_home(Path::new("/home/user"), None));
+        assert!(!is_whole_home_path_with_home(
+            Path::new("/srv/users/ben/projects"),
+            Some(Path::new("/srv/users/ben"))
+        ));
     }
 
     #[test]
