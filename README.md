@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/desktop/src-tauri/icons/icon.png" alt="Warder logo" width="120" height="120">
+  <img src="apps/desktop/src-tauri/icons/icon.png" alt="Warder protected-zone logo" width="120" height="120">
 </p>
 
 <h1 align="center">Warder</h1>
