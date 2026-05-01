@@ -1,0 +1,21 @@
+<svg width="720" height="180" viewBox="0 0 720 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Warder</title>
+  <desc id="desc">Warder wordmark with a modern protected-zone icon.</desc>
+  <rect width="720" height="180" rx="24" fill="#0F171D"/>
+  <g transform="translate(48 42)">
+    <rect width="96" height="96" rx="22" fill="url(#tile)"/>
+    <path d="M29 28H69C74.5228 28 79 32.4772 79 38V67" stroke="#D0AA57" stroke-width="8" stroke-linecap="round"/>
+    <path d="M67 79H28C21.3726 79 16 73.6274 16 67V28" stroke="#D0AA57" stroke-width="8" stroke-linecap="round"/>
+    <rect x="31" y="31" width="42" height="42" rx="9" fill="#EEF6F2"/>
+    <path d="M39 43L46 61L53 48L60 61L67 43" stroke="#1D725C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="78" cy="75" r="9" fill="#D0AA57"/>
+  </g>
+  <text x="174" y="96" fill="#EEF6F2" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="56" font-weight="800" letter-spacing="0">Warder</text>
+  <text x="177" y="129" fill="#A8B6C5" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18" font-weight="500" letter-spacing="0">Protected sessions for local agent work</text>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="96" y2="96" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D725C"/>
+      <stop offset="1" stop-color="#123B36"/>
+    </linearGradient>
+  </defs>
+</svg>
