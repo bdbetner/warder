@@ -1,0 +1,17 @@
+/target/
+/apps/desktop/node_modules/
+/apps/desktop/dist/
+/apps/desktop/src-tauri/target/
+/release-artifacts/
+/.lattice/
+/.warder/
+/.superpowers/
+*.db
+*.sqlite
+*.sqlite3
+TASKS.local.md
+PROJECT.local.md
+TASKS.md
+PROJECT.md
+.env
+.env.*

@@ -1,0 +1,17 @@
+[enforcement]
+landlock = "disabled"
+cgroups = "required"
+
+[[zones]]
+id = "demo-protected"
+name = "Demo Protected Directory"
+description = "A local throwaway directory for Warder's first end-to-end prototype smoke test."
+paths = ["/tmp/warder-demo/protected"]
+write_policy = "deny"
+snapshot = "disabled"
+
+[[agents]]
+id = "local-shell"
+label = "Local Shell"
+command = "sh"
+profile = "local-script"

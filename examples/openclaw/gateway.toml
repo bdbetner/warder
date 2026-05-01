@@ -1,0 +1,29 @@
+[enforcement]
+landlock = "best-effort"
+cgroups = "best-effort"
+writable-roots = ["/tmp/warder-openclaw/workspace"]
+
+[network]
+journal = true
+
+[[zones]]
+id = "personal-secrets"
+name = "Personal Secrets"
+description = "Host secrets OpenClaw should not mutate while the gateway is supervised."
+paths = ["/home/user/.ssh", "/home/user/.config"]
+write_policy = "deny"
+snapshot = "disabled"
+
+[[zones]]
+id = "openclaw-state"
+name = "OpenClaw State"
+description = "OpenClaw state is sensitive. Start with journaling and snapshots before denying writes."
+paths = ["/home/user/.openclaw"]
+write_policy = "allow"
+snapshot = "best-effort"
+
+[[agents]]
+id = "openclaw"
+label = "OpenClaw Gateway"
+command = "openclaw"
+profile = "openclaw-gateway"

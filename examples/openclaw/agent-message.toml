@@ -1,0 +1,29 @@
+[enforcement]
+landlock = "best-effort"
+cgroups = "best-effort"
+writable-roots = ["/tmp/warder-openclaw/workspace"]
+
+[network]
+journal = true
+
+[[zones]]
+id = "personal-secrets"
+name = "Personal Secrets"
+description = "Secrets and personal configuration that should stay outside an OpenClaw agent run."
+paths = ["/home/user/.ssh", "/home/user/.config"]
+write_policy = "deny"
+snapshot = "disabled"
+
+[[zones]]
+id = "workspace"
+name = "OpenClaw Workspace"
+description = "Workspace root selected for this supervised OpenClaw agent session."
+paths = ["/tmp/warder-openclaw/workspace"]
+write_policy = "allow"
+snapshot = "best-effort"
+
+[[agents]]
+id = "openclaw"
+label = "OpenClaw Agent"
+command = "openclaw"
+profile = "openclaw-agent"

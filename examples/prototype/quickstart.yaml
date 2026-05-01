@@ -1,0 +1,21 @@
+enforcement:
+  landlock: disabled
+  cgroups: best-effort
+
+network:
+  journal: false
+
+zones:
+  - id: quickstart-protected
+    name: Quickstart Protected Directory
+    description: A throwaway protected directory for trying Warder without delegated cgroup setup.
+    paths:
+      - /tmp/warder-quickstart/protected
+    write-policy: deny
+    snapshot: disabled
+
+agents:
+  - id: local-shell
+    label: Local Shell
+    command: sh
+    profile: local-script

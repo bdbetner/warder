@@ -1,0 +1,37 @@
+[enforcement]
+landlock = "best-effort"
+cgroups = "best-effort"
+writable-roots = ["/tmp/warder-openclaw/project"]
+
+[network]
+journal = true
+
+[[zones]]
+id = "credentials"
+name = "Credentials"
+description = "Credential roots should be readable only when explicitly needed and should not be modified by OpenClaw sessions."
+paths = ["/home/user/.ssh", "/home/user/.aws", "/home/user/.config/gh"]
+write_policy = "deny"
+snapshot = "disabled"
+
+[[zones]]
+id = "personal-notes"
+name = "Personal Notes"
+description = "Personal note roots are protected from writes during OpenClaw project work."
+paths = ["/home/user/notes", "/home/user/Documents"]
+write_policy = "deny"
+snapshot = "disabled"
+
+[[zones]]
+id = "project-workspace"
+name = "Project Workspace"
+description = "The selected project workspace is allowed and can be snapshotted before risky work."
+paths = ["/tmp/warder-openclaw/project"]
+write_policy = "allow"
+snapshot = "best-effort"
+
+[[agents]]
+id = "openclaw"
+label = "OpenClaw Project Agent"
+command = "openclaw"
+profile = "openclaw-agent"
