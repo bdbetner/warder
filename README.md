@@ -17,6 +17,7 @@ The first goal is practical: keep permissive local agent workflows fast while ma
 
 - New user: read [Quick Start](#quick-start), then [Protected Zones](docs/protected-zones.md).
 - Installing an alpha build: read [Install Notes](docs/install.md) and [Release Trust Model](docs/release-trust.md).
+- Reviewing the alpha: read [Reviewer Feedback Guide](docs/reviewer-feedback.md).
 - Evaluating the safety model: read [Security Model](docs/security-model.md) and [Threat Model](THREAT_MODEL.md).
 - Looking for the project direction: read [Product Overview](PRODUCT_SPEC.md), [Vision](docs/vision.md), and [Roadmap](ROADMAP.md).
 - Looking for common scenarios: read [Examples](docs/examples/README.md) and [FAQ](docs/FAQ.md).
@@ -212,6 +213,7 @@ npm run tauri -- build --bundles deb,rpm,appimage --ci
 - [FAQ](docs/FAQ.md)
 - [Examples](docs/examples/README.md)
 - [Install Notes](docs/install.md)
+- [Reviewer Feedback Guide](docs/reviewer-feedback.md)
 - [Release Trust Model](docs/release-trust.md)
 - [Release Readiness](docs/release-readiness.md)
 - [Protected Zones](docs/protected-zones.md)

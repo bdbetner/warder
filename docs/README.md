@@ -5,6 +5,7 @@ Warder is an alpha Linux safety tool for supervised local agent sessions. Start 
 ## Try Warder
 
 - [Install Notes](install.md): download, verify, install, or build Warder.
+- [Reviewer Feedback Guide](reviewer-feedback.md): release-artifact demo path and feedback checklist.
 - [Prototype Demo](prototype-demo.md): run the source-checkout demo flow.
 - [Protected Zones](protected-zones.md): choose what Warder should protect.
 - [Examples](examples/README.md): common protected-zone scenarios.
