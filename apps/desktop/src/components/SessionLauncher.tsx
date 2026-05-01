@@ -23,12 +23,14 @@ function launchRequest(
 interface SessionLauncherProps {
   configPath: string;
   dbPath: string;
+  hasProtectedPaths: boolean;
   requireEnforcement: boolean;
 }
 
 export function SessionLauncher({
   configPath,
   dbPath,
+  hasProtectedPaths,
   requireEnforcement,
 }: SessionLauncherProps) {
   const [command, setCommand] = useState(
@@ -49,6 +51,10 @@ export function SessionLauncher({
   async function runDryRun() {
     setError(null);
     setLaunchResult(null);
+    if (!hasProtectedPaths) {
+      setError("select at least one protected path before launching a session");
+      return;
+    }
     try {
       const request = launchRequest(command, configPath, dbPath, requireEnforcement);
       const [output, cli] = await Promise.all([
@@ -68,6 +74,10 @@ export function SessionLauncher({
 
   async function runProtectedSession() {
     setError(null);
+    if (!hasProtectedPaths) {
+      setError("select at least one protected path before launching a session");
+      return;
+    }
     setRunning(true);
     try {
       const request = launchRequest(command, configPath, dbPath, requireEnforcement);
@@ -97,6 +107,11 @@ export function SessionLauncher({
           protected writes cannot be blocked.
         </p>
       )}
+      {!hasProtectedPaths && (
+        <p className="notice">
+          Select at least one protected path in setup before launching.
+        </p>
+      )}
       <label className="field">
         Command
         <input
@@ -106,8 +121,14 @@ export function SessionLauncher({
         />
       </label>
       <div className="toolbar">
-        <button onClick={runDryRun}>Dry run</button>
-        <button className="primary" disabled={running} onClick={runProtectedSession}>
+        <button disabled={!hasProtectedPaths} onClick={runDryRun}>
+          Dry run
+        </button>
+        <button
+          className="primary"
+          disabled={running || !hasProtectedPaths}
+          onClick={runProtectedSession}
+        >
           {running ? "Running..." : "Run protected session"}
         </button>
       </div>

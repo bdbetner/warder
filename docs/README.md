@@ -17,6 +17,7 @@ Warder is an alpha Linux safety tool for supervised local agent sessions. Start 
 - [Threat Model](../THREAT_MODEL.md): risks Warder is designed around.
 - [Permissions](permissions.md): how policy choices are framed.
 - [Release Trust Model](release-trust.md): how to verify alpha artifacts.
+- [Release Readiness](release-readiness.md): final alpha release decisions and pull-release criteria.
 - [Security Review Triage](security-review-triage.md): current hardening priorities from independent review.
 
 ## Understand The Project

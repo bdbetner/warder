@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-111827.svg)](#current-status)
 
-Warder is an alpha Linux safety tool for running local AI agents with protected zones, supervised sessions, and readable receipts.
+Warder is an alpha Linux supervised-session tool for running local AI agents with protected zones, write-blocking where the host supports it, and readable receipts.
 
 It lets you declare protected folders, launch an agent through Warder, and get a receipt that explains what the session was allowed to do, what Warder observed, which protections were active, and where host support was missing.
 
@@ -47,6 +47,7 @@ It is not an always-on system guard. Warder only supervises commands launched th
 
 - Warder only supervises processes launched through `warder run`.
 - Host support matters: missing Landlock, cgroups, Btrfs, or eBPF permissions can reduce protection.
+- Protected reads are visible policy notes in v1; Warder does not block reads yet.
 - Current network journaling is visibility, not complete network enforcement.
 - Local receipts and journals are useful accountability records, not tamper-proof forensics.
 - Alpha packages are checksummed and attested where available, but they are not package-manager signed.
@@ -92,6 +93,8 @@ warder journal --db .warder/warder.db --session <session-id> --file
 ## Desktop App
 
 The native Linux desktop app lives in `apps/desktop`. It helps create a Warder config, launch supervised sessions, and review receipts and journals.
+
+The GUI requires at least one protected path before saving setup or launching. Strict write-block mode is available as an explicit toggle, but it is not enabled by default because many Linux hosts do not expose usable Landlock support.
 
 Development launch:
 
@@ -210,6 +213,7 @@ npm run tauri -- build --bundles deb,rpm,appimage --ci
 - [Examples](docs/examples/README.md)
 - [Install Notes](docs/install.md)
 - [Release Trust Model](docs/release-trust.md)
+- [Release Readiness](docs/release-readiness.md)
 - [Protected Zones](docs/protected-zones.md)
 - [Security Model](docs/security-model.md)
 - [Threat Model](THREAT_MODEL.md)

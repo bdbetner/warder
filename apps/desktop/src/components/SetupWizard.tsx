@@ -22,6 +22,7 @@ interface SetupWizardProps {
   onDbPathChange: (path: string) => void;
   onAgentCommandChange: (command: string) => void;
   onRequireEnforcementChange: (enabled: boolean) => void;
+  error: string | null;
   onComplete: () => Promise<void>;
 }
 
@@ -46,6 +47,7 @@ export function SetupWizard({
   onDbPathChange,
   onAgentCommandChange,
   onRequireEnforcementChange,
+  error,
   onComplete,
 }: SetupWizardProps) {
   const [customPath, setCustomPath] = useState("");
@@ -264,6 +266,7 @@ export function SetupWizard({
             </article>
           ))}
         </div>
+        {error && <pre className="output error">{error}</pre>}
         <button className="primary" onClick={() => void onComplete()}>
           Save setup
         </button>

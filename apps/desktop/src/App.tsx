@@ -100,6 +100,7 @@ export default function App() {
   const [requireEnforcement, setRequireEnforcement] = useState(false);
   const [configPath, setConfigPath] = useState("");
   const [dbPath, setDbPath] = useState("");
+  const [setupError, setSetupError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -290,6 +291,7 @@ export default function App() {
   }
 
   async function saveSetup() {
+    setSetupError(null);
     const draft: GuiConfigDraft = {
       agent: {
         id: "local-agent",
@@ -310,7 +312,12 @@ export default function App() {
       network_journal: networkJournal,
     };
 
-      await invoke("save_gui_config", {
+    if (draft.protected_paths.length === 0) {
+      setSetupError("Select at least one protected path before saving setup.");
+      return;
+    }
+
+    await invoke("save_gui_config", {
       configPath,
       draft,
     });
@@ -356,6 +363,7 @@ export default function App() {
           onDbPathChange={setDbPath}
           onAgentCommandChange={setAgentCommand}
           onRequireEnforcementChange={setRequireEnforcement}
+          error={setupError}
           onComplete={saveSetup}
         />
       ) : (
@@ -370,6 +378,7 @@ export default function App() {
             <SessionLauncher
               configPath={configPath}
               dbPath={dbPath}
+              hasProtectedPaths={selectedCount > 0}
               requireEnforcement={requireEnforcement}
             />
             <SessionLogs dbPath={dbPath} />

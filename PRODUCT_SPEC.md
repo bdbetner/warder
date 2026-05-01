@@ -1,10 +1,12 @@
 # Product Overview
 
-Warder helps Linux users run local AI agents with protected zones, supervised sessions, and readable receipts.
+Warder helps Linux users run local AI agents through supervised sessions with protected zones and readable receipts.
 
 The core product promise is simple:
 
 > Before an agent runs, Warder shows what it should be allowed to do. After it runs, Warder gives the user a receipt of what happened and which protections actually held.
+
+The v1 public promise is narrower and defensible: Warder supervises commands launched through Warder, can deny protected writes with Landlock where available, and records honest receipts when host coverage is degraded.
 
 ## Problem
 
@@ -77,6 +79,8 @@ It can:
 - produce text and JSON receipts
 - keep the daemon optional for normal supervised sessions
 
+The desktop app must not present an empty policy as protected. Users must select at least one protected path before saving setup or launching from the GUI.
+
 ## Non-Goals
 
 Warder is not:
@@ -88,6 +92,8 @@ Warder is not:
 - a browser, email, or calendar automation tool
 - a guarantee that unsupported hosts can safely run permissive agents
 - an always-on guard for commands launched outside Warder
+- read-blocking enforcement in v1
+- destination-aware network blocking in v1
 
 ## Product Direction
 

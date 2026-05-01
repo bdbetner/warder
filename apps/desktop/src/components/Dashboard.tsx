@@ -57,7 +57,11 @@ export function Dashboard({ paths, onRunSetup, onStartSession }: DashboardProps)
           </div>
         </div>
         <div className="toolbar">
-          <button className="primary" onClick={onStartSession}>
+          <button
+            className="primary"
+            disabled={enabled.length === 0}
+            onClick={onStartSession}
+          >
             Start protected session
           </button>
           <button onClick={onRunSetup}>Run setup wizard</button>

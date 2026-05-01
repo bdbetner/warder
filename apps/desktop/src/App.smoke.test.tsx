@@ -226,5 +226,31 @@ describe("Warder desktop smoke flow", () => {
       screen.queryByRole("heading", { name: "Choose an agent profile" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/0 paths selected/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start protected session" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Dry run" })).toBeDisabled();
+  });
+
+  test("does not save setup without a protected path", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Choose an agent profile" });
+    const systemRow = screen.getByDisplayValue("/etc").closest("article");
+    const sshRow = screen.getByDisplayValue("/home/alex/.ssh").closest("article");
+    expect(systemRow).not.toBeNull();
+    expect(sshRow).not.toBeNull();
+    await user.click(within(systemRow as HTMLElement).getAllByRole("checkbox")[0]);
+    await user.click(within(sshRow as HTMLElement).getAllByRole("checkbox")[0]);
+    await user.click(screen.getByRole("button", { name: "Save setup" }));
+
+    expect(
+      await screen.findByText(/Select at least one protected path/),
+    ).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "save_gui_config",
+      expect.anything(),
+    );
   });
 });

@@ -12,6 +12,8 @@ Warder alpha builds target Linux and ship through GitHub Releases. The release a
 
 The `.deb` and RPM install both the CLI and GUI. The AppImage is GUI-only, so keep the separate `warder` binary nearby when using the portable artifact folder.
 
+For the current alpha, the lowest-risk review path is the `.deb` or RPM because those packages install the CLI and desktop app together.
+
 ## Install From a GitHub Release
 
 Download a tagged alpha release and verify it:

@@ -6,6 +6,8 @@ content smoke checks, and GitHub artifact attestations when available.
 
 Package-manager signatures are not included in current alpha releases.
 
+Treat every release as an alpha review build until the installed-artifact demo in [Release Readiness](release-readiness.md) passes on a clean Linux machine.
+
 ## What To Verify
 
 Before installing a release asset:
