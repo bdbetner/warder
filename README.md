@@ -1,4 +1,6 @@
-# Warder
+<p align="center">
+  <img src="docs/assets/warder-logo.svg" alt="Warder logo: protected sessions for local agent work" width="560">
+</p>
 
 [![CI](https://github.com/bdbetner/warder/actions/workflows/ci.yml/badge.svg)](https://github.com/bdbetner/warder/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/bdbetner/warder?include_prereleases&label=release)](https://github.com/bdbetner/warder/releases)
