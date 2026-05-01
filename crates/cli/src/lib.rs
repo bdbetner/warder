@@ -2821,25 +2821,61 @@ fn append_agent_command_diagnostics(
 }
 
 fn declared_command_executable(command: &str) -> Option<String> {
-    command
-        .split_whitespace()
-        .next()
-        .map(str::trim)
-        .filter(|command| !command.is_empty())
-        .map(str::to_string)
+    let command = command.trim_start();
+    let mut chars = command.chars();
+    match chars.next() {
+        Some(quote @ ('\'' | '"')) => {
+            let mut executable = String::new();
+            let mut escaped = false;
+            for character in chars {
+                if escaped {
+                    executable.push(character);
+                    escaped = false;
+                } else if character == '\\' {
+                    escaped = true;
+                } else if character == quote {
+                    break;
+                } else {
+                    executable.push(character);
+                }
+            }
+            (!executable.is_empty()).then_some(executable)
+        }
+        Some(first) => {
+            let mut executable = first.to_string();
+            executable.extend(chars.take_while(|character| !character.is_whitespace()));
+            Some(executable)
+        }
+        None => None,
+    }
 }
 
 fn resolve_declared_executable(executable: &str) -> Option<PathBuf> {
     let path = Path::new(executable);
     if executable.contains('/') {
-        return path.exists().then(|| path.to_path_buf());
+        return is_executable_file(path).then(|| path.to_path_buf());
     }
 
     std::env::var_os("PATH").and_then(|paths| {
         std::env::split_paths(&paths)
             .map(|directory| directory.join(executable))
-            .find(|candidate| candidate.exists())
+            .find(|candidate| is_executable_file(candidate))
     })
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    path.is_file()
+        && std::fs::metadata(path)
+            .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
 }
 
 fn read_dir_diagnostic(
@@ -5827,17 +5863,21 @@ fn default_daemon_runtime_path() -> PathBuf {
 }
 
 fn xdg_data_home(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> PathBuf {
-    xdg_data_home.unwrap_or_else(|| {
-        home.map(|home| home.join(".local").join("share"))
-            .unwrap_or_else(|| PathBuf::from(".warder"))
-    })
+    xdg_data_home
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| {
+            home.map(|home| home.join(".local").join("share"))
+                .unwrap_or_else(|| PathBuf::from(".warder"))
+        })
 }
 
 fn xdg_state_home(xdg_state_home: Option<PathBuf>, home: Option<PathBuf>) -> PathBuf {
-    xdg_state_home.unwrap_or_else(|| {
-        home.map(|home| home.join(".local").join("state"))
-            .unwrap_or_else(|| PathBuf::from(".warder"))
-    })
+    xdg_state_home
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| {
+            home.map(|home| home.join(".local").join("state"))
+                .unwrap_or_else(|| PathBuf::from(".warder"))
+        })
 }
 
 fn generate_session_id() -> String {

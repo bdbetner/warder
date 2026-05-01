@@ -140,6 +140,12 @@ where
             });
         }
         let snapshot_id = format!("{}-btrfs", request.session_id);
+        validate_snapshot_id(&snapshot_id).map_err(|error| SnapshotError {
+            message: format!(
+                "btrfs snapshot creation failed for session '{}': {}",
+                request.session_id, error.message
+            ),
+        })?;
         let session_snapshot_root = self.snapshot_root.join(&snapshot_id);
         std::fs::create_dir_all(&session_snapshot_root).map_err(|error| SnapshotError {
             message: format!(
@@ -632,6 +638,21 @@ mod tests {
 
         assert!(error.message.contains("btrfs snapshot creation failed"));
         assert!(error.message.contains("btrfs command failed"));
+    }
+
+    #[test]
+    fn btrfs_snapshot_driver_rejects_malicious_session_ids_before_path_join() {
+        let snapshot_root = temp_snapshot_root("create-invalid-session-id");
+        let driver = BtrfsSnapshotDriver::new(&snapshot_root, RecordingCommandRunner::default());
+        let request = SnapshotCreateRequest {
+            session_id: "../escape".to_string(),
+            roots: vec![std::path::PathBuf::from("/tmp/project")],
+        };
+
+        let error = driver.create_snapshot(&request).unwrap_err();
+
+        assert!(error.message.contains("invalid snapshot id"));
+        assert!(!snapshot_root.join("../escape-btrfs").exists());
     }
 
     #[test]

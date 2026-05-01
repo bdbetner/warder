@@ -619,6 +619,68 @@ fn render_host_doctor_with_config_checks_agent_command_resolution() {
     assert!(rendered.contains("definitely-missing-warder-command"));
 }
 
+#[cfg(unix)]
+#[test]
+fn render_host_doctor_with_config_handles_quoted_and_non_executable_commands() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = temp_dir("warder-cli-doctor-quoted-command");
+    let bin_dir = root.join("bin dir");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    let executable = bin_dir.join("agent tool");
+    let non_executable = bin_dir.join("not executable");
+    std::fs::write(&executable, "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::write(&non_executable, "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::set_permissions(&non_executable, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+    let config_path = root.join("warder.toml");
+    std::fs::write(
+        &config_path,
+        format!(
+            r#"
+            [enforcement]
+            landlock = "disabled"
+            cgroups = "disabled"
+
+            [[zones]]
+            id = "notes"
+            name = "Notes"
+            paths = ["/tmp/warder-notes"]
+            snapshot = "disabled"
+
+            [[agents]]
+            id = "quoted"
+            label = "Quoted"
+            command = "'{}' --flag"
+
+            [[agents]]
+            id = "not-executable"
+            label = "Not Executable"
+            command = "'{}'"
+        "#,
+            executable.display(),
+            non_executable.display()
+        ),
+    )
+    .unwrap();
+
+    let rendered = render_host_doctor_from_probe_with_config(
+        warder_daemon::CapabilityProbe {
+            landlock: warder_daemon::CapabilityState::Available,
+            cgroups: warder_daemon::CapabilityState::Available,
+            btrfs: warder_daemon::CapabilityState::Unavailable("not used".to_string()),
+            overlayfs: warder_daemon::CapabilityState::Unavailable("not used".to_string()),
+            ebpf: warder_daemon::CapabilityState::Unavailable("not used".to_string()),
+        },
+        Some(config_path),
+    )
+    .unwrap();
+
+    assert!(rendered.contains("agent command quoted: ok"));
+    assert!(rendered.contains("agent command not-executable: warning"));
+}
+
 #[test]
 fn parses_top_level_help_and_version() {
     assert_eq!(parse_args(["warder", "--help"]).unwrap(), CliCommand::Help);
@@ -5811,6 +5873,20 @@ fn xdg_path_helpers_use_user_scoped_defaults() {
             Some(PathBuf::from("/home/alice"))
         ),
         PathBuf::from("/tmp/state")
+    );
+    assert_eq!(
+        xdg_data_home(
+            Some(PathBuf::from("relative-data")),
+            Some(PathBuf::from("/home/alice"))
+        ),
+        PathBuf::from("/home/alice/.local/share")
+    );
+    assert_eq!(
+        xdg_state_home(
+            Some(PathBuf::from("relative-state")),
+            Some(PathBuf::from("/home/alice"))
+        ),
+        PathBuf::from("/home/alice/.local/state")
     );
 }
 

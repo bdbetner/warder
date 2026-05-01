@@ -167,10 +167,20 @@ fn rule_path_matches(rule: &PolicyRule, target_path: &Path) -> bool {
     let path_scope_matches = rule
         .path_scope
         .as_ref()
-        .map(|scope| target_path.starts_with(scope))
+        .map(|scope| path_scope_matches(scope, target_path))
         .unwrap_or(true);
 
     path_scope_matches && globs_match(&rule.file_globs, target_path)
+}
+
+fn path_scope_matches(scope: &Path, target_path: &Path) -> bool {
+    match (
+        normalized_existing_or_lexical(scope),
+        normalized_existing_or_lexical(target_path),
+    ) {
+        (Some(scope), Some(target)) => target == scope || target.starts_with(scope),
+        _ => false,
+    }
 }
 
 fn globs_match(globs: &[String], target_path: &Path) -> bool {
@@ -194,45 +204,27 @@ fn globs_match(globs: &[String], target_path: &Path) -> bool {
 }
 
 fn simple_glob_match(glob: &str, name: &str) -> bool {
-    if glob == "*" {
-        return true;
-    }
-
     if !glob.contains('*') {
         return glob == name;
     }
 
-    let anchored_start = !glob.starts_with('*');
-    let anchored_end = !glob.ends_with('*');
-    let parts = glob.split('*').collect::<Vec<_>>();
-    let mut remainder = name;
+    wildcard_match(glob.as_bytes(), name.as_bytes())
+}
 
-    for (index, part) in parts.iter().enumerate() {
-        if part.is_empty() {
-            continue;
+fn wildcard_match(pattern: &[u8], name: &[u8]) -> bool {
+    match pattern.split_first() {
+        None => name.is_empty(),
+        Some((&b'*', rest)) if rest.first() == Some(&b'*') => {
+            let rest = &rest[1..];
+            (0..=name.len()).any(|index| wildcard_match(rest, &name[index..]))
         }
-
-        if index == 0 && anchored_start {
-            let Some(next) = remainder.strip_prefix(part) else {
-                return false;
-            };
-            remainder = next;
-            continue;
-        }
-
-        let Some(position) = remainder.find(part) else {
-            return false;
-        };
-        remainder = &remainder[position + part.len()..];
-    }
-
-    if anchored_end {
-        match parts.iter().rev().find(|part| !part.is_empty()) {
-            Some(last) => name.ends_with(last),
-            None => true,
-        }
-    } else {
-        true
+        Some((&b'*', rest)) => (0..=name.len())
+            .take_while(|index| *index == 0 || name[*index - 1] != b'/')
+            .any(|index| wildcard_match(rest, &name[index..])),
+        Some((&expected, rest)) => name
+            .split_first()
+            .map(|(&actual, name_rest)| actual == expected && wildcard_match(rest, name_rest))
+            .unwrap_or(false),
     }
 }
 
@@ -616,6 +608,55 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn rule_path_scope_matches_canonical_symlink_targets() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_root("scope-symlink-root");
+        let real_scope = root.join("real-scope");
+        let link_scope = root.join("linked-scope");
+        fs::create_dir_all(&real_scope).unwrap();
+        symlink(&real_scope, &link_scope).unwrap();
+        let real_file = real_scope.join("note.md");
+        let linked_file = link_scope.join("other.md");
+        fs::write(&real_file, "hello").unwrap();
+        fs::write(&linked_file, "hello").unwrap();
+        let agent = agent();
+        let protected_zone = protected_zone(root.clone());
+        let rules = vec![PolicyRule {
+            id: "rule-1".to_string(),
+            protected_zone_id: protected_zone.id.clone(),
+            agent_id: agent.id.clone(),
+            capability: Capability::WriteFile,
+            effect: PolicyEffect::Allow,
+            path_scope: Some(link_scope),
+            file_globs: vec!["*.md".to_string()],
+            expires_at: None,
+        }];
+
+        assert_eq!(
+            evaluate_policy_with_rules(
+                &agent,
+                &protected_zone,
+                &rules,
+                Capability::WriteFile,
+                real_file
+            ),
+            PolicyDecision::Allow
+        );
+        assert_eq!(
+            evaluate_policy_with_rules(
+                &agent,
+                &protected_zone,
+                &rules,
+                Capability::WriteFile,
+                linked_file
+            ),
+            PolicyDecision::Allow
+        );
+    }
+
     #[test]
     fn path_aware_globs_match_full_paths() {
         let root = temp_root("path-globs");
@@ -635,7 +676,7 @@ mod tests {
             capability: Capability::WriteFile,
             effect: PolicyEffect::Allow,
             path_scope: Some(root),
-            file_globs: vec!["*/src/*.rs".to_string()],
+            file_globs: vec!["**/src/*.rs".to_string()],
             expires_at: None,
         }];
 
@@ -658,6 +699,85 @@ mod tests {
                 docs_file
             ),
             PolicyDecision::Ask
+        );
+    }
+
+    #[test]
+    fn path_aware_globs_do_not_let_single_star_cross_directories() {
+        let root = temp_root("path-glob-segments");
+        let src_file = root.join("src").join("main.rs");
+        let nested_file = root.join("src").join("nested").join("main.rs");
+        let deep_file = root
+            .join("packages")
+            .join("cli")
+            .join("src")
+            .join("main.rs");
+        for file in [&src_file, &nested_file, &deep_file] {
+            fs::create_dir_all(file.parent().unwrap()).unwrap();
+            fs::write(file, "fn main() {}").unwrap();
+        }
+        let agent = agent();
+        let protected_zone = protected_zone(root.clone());
+        let shallow_rule = vec![PolicyRule {
+            id: "rule-1".to_string(),
+            protected_zone_id: protected_zone.id.clone(),
+            agent_id: agent.id.clone(),
+            capability: Capability::WriteFile,
+            effect: PolicyEffect::Allow,
+            path_scope: Some(root.clone()),
+            file_globs: vec!["**/src/*.rs".to_string()],
+            expires_at: None,
+        }];
+        let nested_rule = vec![PolicyRule {
+            id: "rule-2".to_string(),
+            protected_zone_id: protected_zone.id.clone(),
+            agent_id: agent.id.clone(),
+            capability: Capability::WriteFile,
+            effect: PolicyEffect::Allow,
+            path_scope: Some(root),
+            file_globs: vec!["**/src/**/*.rs".to_string()],
+            expires_at: None,
+        }];
+
+        assert_eq!(
+            evaluate_policy_with_rules(
+                &agent,
+                &protected_zone,
+                &shallow_rule,
+                Capability::WriteFile,
+                src_file
+            ),
+            PolicyDecision::Allow
+        );
+        assert_eq!(
+            evaluate_policy_with_rules(
+                &agent,
+                &protected_zone,
+                &shallow_rule,
+                Capability::WriteFile,
+                nested_file.clone()
+            ),
+            PolicyDecision::Ask
+        );
+        assert_eq!(
+            evaluate_policy_with_rules(
+                &agent,
+                &protected_zone,
+                &nested_rule,
+                Capability::WriteFile,
+                nested_file
+            ),
+            PolicyDecision::Allow
+        );
+        assert_eq!(
+            evaluate_policy_with_rules(
+                &agent,
+                &protected_zone,
+                &shallow_rule,
+                Capability::WriteFile,
+                deep_file
+            ),
+            PolicyDecision::Allow
         );
     }
 }
