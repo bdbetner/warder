@@ -71,7 +71,13 @@ fn parses_status_and_journal_commands() {
     );
     assert_eq!(
         parse_args(["warder", "doctor"]).unwrap(),
-        CliCommand::Doctor
+        CliCommand::Doctor { config: None }
+    );
+    assert_eq!(
+        parse_args(["warder", "doctor", "--config", "/tmp/warder.toml"]).unwrap(),
+        CliCommand::Doctor {
+            config: Some(PathBuf::from("/tmp/warder.toml"))
+        }
     );
     assert_eq!(
         parse_args(["warder", "journal", "--session", "session-1"]).unwrap(),
@@ -565,6 +571,52 @@ fn render_host_doctor_warns_when_proc_surfaces_are_hidden() {
     assert!(rendered.contains("proc network visibility: warning"));
     assert!(rendered.contains("proc process metadata: warning"));
     assert!(rendered.contains("cgroup launch tagging: warning"));
+}
+
+#[test]
+fn render_host_doctor_with_config_checks_agent_command_resolution() {
+    let config_path = temp_file("warder-cli-doctor-command-config", "toml");
+    std::fs::write(
+        &config_path,
+        r#"
+            [enforcement]
+            landlock = "disabled"
+            cgroups = "disabled"
+
+            [[zones]]
+            id = "notes"
+            name = "Notes"
+            paths = ["/tmp/warder-notes"]
+            snapshot = "disabled"
+
+            [[agents]]
+            id = "shell"
+            label = "Shell"
+            command = "sh -c true"
+
+            [[agents]]
+            id = "missing"
+            label = "Missing"
+            command = "definitely-missing-warder-command"
+        "#,
+    )
+    .unwrap();
+
+    let rendered = render_host_doctor_from_probe_with_config(
+        warder_daemon::CapabilityProbe {
+            landlock: warder_daemon::CapabilityState::Available,
+            cgroups: warder_daemon::CapabilityState::Available,
+            btrfs: warder_daemon::CapabilityState::Unavailable("not used".to_string()),
+            overlayfs: warder_daemon::CapabilityState::Unavailable("not used".to_string()),
+            ebpf: warder_daemon::CapabilityState::Unavailable("not used".to_string()),
+        },
+        Some(config_path),
+    )
+    .unwrap();
+
+    assert!(rendered.contains("agent command shell: ok"));
+    assert!(rendered.contains("agent command missing: warning"));
+    assert!(rendered.contains("definitely-missing-warder-command"));
 }
 
 #[test]

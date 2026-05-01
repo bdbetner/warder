@@ -36,11 +36,14 @@ fn main() {
             );
             println!("{}", warder_daemon::render_status(&report));
         }
-        Ok(warder_cli::CliCommand::Doctor) => {
-            println!(
-                "{}",
-                warder_cli::render_host_doctor_from_probe(warder_daemon::probe_current_host())
-            );
+        Ok(warder_cli::CliCommand::Doctor { config }) => {
+            match warder_cli::render_host_doctor_from_probe_with_config(
+                warder_daemon::probe_current_host(),
+                config,
+            ) {
+                Ok(report) => println!("{report}"),
+                Err(error) => exit_with_error(error),
+            }
         }
         Ok(warder_cli::CliCommand::Init {
             output,

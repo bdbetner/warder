@@ -41,7 +41,9 @@ pub enum CliCommand {
     },
     Stop,
     Status,
-    Doctor,
+    Doctor {
+        config: Option<PathBuf>,
+    },
     Init {
         output: PathBuf,
         profile: String,
@@ -230,7 +232,7 @@ where
         "start" => parse_start(args),
         "stop" => Ok(CliCommand::Stop),
         "status" => Ok(CliCommand::Status),
-        "doctor" => Ok(CliCommand::Doctor),
+        "doctor" => parse_doctor(args),
         "init" => parse_init(args),
         "profiles" => parse_profiles(args),
         "run" => parse_run(args),
@@ -310,7 +312,13 @@ pub fn command_summary(command: &CliCommand) -> String {
         CliCommand::Start { .. } => "warder daemon start requested".to_string(),
         CliCommand::Stop => "warder daemon stop requested".to_string(),
         CliCommand::Status => "warder status requested".to_string(),
-        CliCommand::Doctor => "host readiness check requested".to_string(),
+        CliCommand::Doctor { config: Some(config) } => {
+            format!(
+                "host readiness check requested for config '{}'",
+                config.display()
+            )
+        }
+        CliCommand::Doctor { config: None } => "host readiness check requested".to_string(),
         CliCommand::Init {
             output,
             profile,
@@ -1695,7 +1703,7 @@ pub fn usage() -> &'static str {
 primary: warder run --config <path> --launch --agent <id> [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
 record only: warder run --config <path> --agent <id> -- <agent command>\n\
 preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
-readiness: warder doctor\n\
+readiness: warder doctor [--config <path>]\n\
 init: warder init --protected-path <path> [--output <path>] [--profile <id>] [--agent-command <command>] [--force] [--print]\n\
 profiles: warder profiles [--format text|json]\n\
 snapshot: warder snapshot --config <path> --session <id> --snapshot-root <path>\n\
@@ -2484,6 +2492,15 @@ fn parse_start(args: Vec<String>) -> Result<CliCommand, CliError> {
     })
 }
 
+fn parse_doctor(args: Vec<String>) -> Result<CliCommand, CliError> {
+    if args.is_empty() {
+        return Ok(CliCommand::Doctor { config: None });
+    }
+    parse_required_value(args, "--config").map(|config| CliCommand::Doctor {
+        config: Some(PathBuf::from(config)),
+    })
+}
+
 fn parse_required_value(args: Vec<String>, flag: &str) -> Result<String, CliError> {
     if args.len() != 2 || args[0] != flag {
         return err(format!("expected {flag} <value>"));
@@ -2756,6 +2773,73 @@ pub fn render_host_doctor(report: &HostDoctorReport) -> String {
 
 pub fn render_host_doctor_from_probe(probe: warder_daemon::CapabilityProbe) -> String {
     render_host_doctor(&assess_host_doctor(probe, &default_host_diagnostic_paths()))
+}
+
+pub fn render_host_doctor_from_probe_with_config(
+    probe: warder_daemon::CapabilityProbe,
+    config_path: Option<PathBuf>,
+) -> Result<String, CliError> {
+    let mut report = assess_host_doctor(probe, &default_host_diagnostic_paths());
+    if let Some(config_path) = config_path {
+        append_agent_command_diagnostics(&mut report, &config_path)?;
+    }
+    Ok(render_host_doctor(&report))
+}
+
+fn append_agent_command_diagnostics(
+    report: &mut HostDoctorReport,
+    config_path: &Path,
+) -> Result<(), CliError> {
+    let config = load_config(config_path)?;
+    for agent in &config.agents {
+        let Some(executable) = declared_command_executable(&agent.command) else {
+            report.diagnostics.push(HostDiagnostic {
+                label: format!("agent command {}", agent.id),
+                status: HostDiagnosticStatus::Warning,
+                message: "declared command is empty".to_string(),
+            });
+            continue;
+        };
+
+        match resolve_declared_executable(&executable) {
+            Some(path) => report.diagnostics.push(HostDiagnostic {
+                label: format!("agent command {}", agent.id),
+                status: HostDiagnosticStatus::Ok,
+                message: format!("'{}' resolves to {}", executable, path.display()),
+            }),
+            None => report.diagnostics.push(HostDiagnostic {
+                label: format!("agent command {}", agent.id),
+                status: HostDiagnosticStatus::Warning,
+                message: format!(
+                    "'{}' is not executable from PATH or as a configured path",
+                    executable
+                ),
+            }),
+        }
+    }
+    Ok(())
+}
+
+fn declared_command_executable(command: &str) -> Option<String> {
+    command
+        .split_whitespace()
+        .next()
+        .map(str::trim)
+        .filter(|command| !command.is_empty())
+        .map(str::to_string)
+}
+
+fn resolve_declared_executable(executable: &str) -> Option<PathBuf> {
+    let path = Path::new(executable);
+    if executable.contains('/') {
+        return path.exists().then(|| path.to_path_buf());
+    }
+
+    std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths)
+            .map(|directory| directory.join(executable))
+            .find(|candidate| candidate.exists())
+    })
 }
 
 fn read_dir_diagnostic(
@@ -3310,7 +3394,7 @@ fn snapshot_plan_backend_label(backend: &SnapshotBackend) -> &'static str {
     }
 }
 
-fn load_config(config_path: &PathBuf) -> Result<WarderConfig, CliError> {
+fn load_config(config_path: &Path) -> Result<WarderConfig, CliError> {
     let config_text = std::fs::read_to_string(config_path).map_err(|error| CliError {
         message: format!("failed to read config '{}': {error}", config_path.display()),
     })?;
