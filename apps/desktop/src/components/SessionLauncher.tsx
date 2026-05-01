@@ -1,58 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import { formatShellCommand, splitCommand } from "../command";
 import type { LaunchRequest, LaunchSessionResult } from "../types";
 
 const COMMAND_STATE_KEY = "warder.desktop.launchCommand.v1";
-
-function splitCommand(input: string): string[] {
-  const args: string[] = [];
-  let current = "";
-  let quote: '"' | "'" | null = null;
-  let escaped = false;
-
-  for (const char of input) {
-    if (escaped) {
-      current += char;
-      escaped = false;
-      continue;
-    }
-    if (char === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (quote) {
-      if (char === quote) {
-        quote = null;
-      } else {
-        current += char;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (/\s/.test(char)) {
-      if (current) {
-        args.push(current);
-        current = "";
-      }
-      continue;
-    }
-    current += char;
-  }
-
-  if (escaped) {
-    current += "\\";
-  }
-  if (quote) {
-    throw new Error(`unterminated ${quote} quote in command`);
-  }
-  if (current) {
-    args.push(current);
-  }
-  return args;
-}
 
 function launchRequest(
   commandText: string,
@@ -109,7 +60,7 @@ export function SessionLauncher({
         invoke<string[]>("build_launch_command", { request }),
       ]);
       setDryRun(output);
-      setCliCommand(cli.join(" "));
+      setCliCommand(formatShellCommand(cli));
     } catch (reason) {
       setError(String(reason));
     }
