@@ -5715,13 +5715,45 @@ fn update_session(
 fn default_db_path() -> PathBuf {
     std::env::var_os("WARDER_DB")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".warder/warder.sqlite3"))
+        .unwrap_or_else(|| {
+            xdg_data_home(
+                std::env::var_os("XDG_DATA_HOME").map(PathBuf::from),
+                std::env::var_os("HOME").map(PathBuf::from),
+            )
+            .join("warder")
+            .join("warder.sqlite3")
+        })
 }
 
 fn default_daemon_runtime_path() -> PathBuf {
     std::env::var_os("WARDER_DAEMON_RUNTIME")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".warder/daemon.state"))
+        .unwrap_or_else(|| {
+            if let Some(runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) {
+                runtime_dir.join("warder").join("daemon.state")
+            } else {
+                xdg_state_home(
+                    std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
+                    std::env::var_os("HOME").map(PathBuf::from),
+                )
+                .join("warder")
+                .join("daemon.state")
+            }
+        })
+}
+
+fn xdg_data_home(xdg_data_home: Option<PathBuf>, home: Option<PathBuf>) -> PathBuf {
+    xdg_data_home.unwrap_or_else(|| {
+        home.map(|home| home.join(".local").join("share"))
+            .unwrap_or_else(|| PathBuf::from(".warder"))
+    })
+}
+
+fn xdg_state_home(xdg_state_home: Option<PathBuf>, home: Option<PathBuf>) -> PathBuf {
+    xdg_state_home.unwrap_or_else(|| {
+        home.map(|home| home.join(".local").join("state"))
+            .unwrap_or_else(|| PathBuf::from(".warder"))
+    })
 }
 
 fn generate_session_id() -> String {

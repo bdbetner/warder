@@ -21,7 +21,7 @@ These items take priority over new integrations:
 - Unify path canonicalization and traversal handling across config validation, policy decisions, and Landlock enforcement planning.
 - Reduce the cgroup spawn/tag attribution race, and keep receipts honest when a race or tagging failure leaves journal coverage incomplete.
 - Warn clearly when `network.allowed_destinations` is configured, because destination policy is not enforced in the current alpha.
-- Move default state paths toward stable user-scoped XDG locations instead of per-working-directory `.warder` paths.
+- Continue migration/compatibility polish for stable user-scoped XDG state paths instead of per-working-directory `.warder` paths.
 - Add adversarial tests for symlink/traversal paths, snapshot restore inputs, concurrent DB access, degraded hosts, and journal blind spots.
 
 ## Next Product Improvements

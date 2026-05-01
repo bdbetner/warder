@@ -43,8 +43,8 @@ warder run --config warder.toml --launch --agent coding-agent -- codex
 ## Review
 
 ```bash
-warder receipt --db .warder/warder.db --session <session-id>
-warder journal --db .warder/warder.db --session <session-id> --all
+warder receipt --session <session-id>
+warder journal --session <session-id> --all
 ```
 
 If Landlock or cgroup support is degraded, treat the session as lower-trust and address the host setup before running sensitive work.
