@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use warder_core::{
@@ -29,6 +31,14 @@ fn store(name: &str) -> WarderDb {
     let store = WarderDb::open(temp_db_path(name)).unwrap();
     store.migrate().unwrap();
     store
+}
+
+fn temp_db_dir(name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "warder-db-{name}-{}-{}",
+        std::process::id(),
+        timestamp().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+    ))
 }
 
 fn protected_zone() -> ProtectedZone {
@@ -69,6 +79,60 @@ fn migrations_create_expected_tables() {
     ] {
         assert!(store.table_exists(table).unwrap(), "missing table {table}");
     }
+}
+
+#[test]
+fn open_configures_wal_and_busy_timeout() {
+    let store = WarderDb::open(temp_db_path("open-pragmas")).unwrap();
+
+    let journal_mode: String = store
+        .conn
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .unwrap();
+    let busy_timeout: i64 = store
+        .conn
+        .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+        .unwrap();
+
+    assert_eq!(journal_mode, "wal");
+    assert_eq!(busy_timeout, 5000);
+}
+
+#[cfg(unix)]
+#[test]
+fn open_creates_private_state_directory_and_database_file() {
+    let root = temp_db_dir("private-state");
+    let db_path = root.join("state").join("warder.sqlite3");
+    let _ = std::fs::remove_dir_all(&root);
+
+    let store = WarderDb::open(&db_path).unwrap();
+    drop(store);
+
+    let state_mode = std::fs::metadata(db_path.parent().unwrap())
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o777;
+    let db_mode = std::fs::metadata(&db_path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(state_mode, 0o700);
+    assert_eq!(db_mode, 0o600);
+}
+
+#[test]
+fn ensure_column_rejects_unknown_migration_identifiers() {
+    let store = store("reject-unknown-migration-column");
+
+    let error = store
+        .ensure_column("sessions; DROP TABLE sessions; --", "bad", "TEXT")
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        DbError::InvalidValue {
+            field: "migration_column",
+            ..
+        }
+    ));
 }
 
 #[test]

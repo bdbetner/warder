@@ -1,5 +1,8 @@
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use warder_core::{
@@ -17,6 +20,7 @@ pub type DbResult<T> = Result<T, DbError>;
 #[derive(Debug)]
 pub enum DbError {
     Sqlite(rusqlite::Error),
+    Io(std::io::Error),
     Json(serde_json::Error),
     InvalidTimestamp(i64),
     InvalidValue { field: &'static str, value: String },
@@ -25,6 +29,12 @@ pub enum DbError {
 impl From<rusqlite::Error> for DbError {
     fn from(value: rusqlite::Error) -> Self {
         Self::Sqlite(value)
+    }
+}
+
+impl From<std::io::Error> for DbError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
     }
 }
 
@@ -40,8 +50,13 @@ pub struct WarderDb {
 
 impl WarderDb {
     pub fn open(path: impl AsRef<Path>) -> DbResult<Self> {
+        let path = path.as_ref();
+        prepare_db_path(path)?;
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        conn.busy_timeout(Duration::from_secs(5))?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        set_db_file_permissions(path)?;
         Ok(Self { conn })
     }
 
@@ -69,9 +84,11 @@ impl WarderDb {
         column_name: &str,
         column_type: &str,
     ) -> DbResult<()> {
-        let mut statement = self
-            .conn
-            .prepare(&format!("PRAGMA table_info({table_name})"))?;
+        validate_migration_column(table_name, column_name, column_type)?;
+        let mut statement = self.conn.prepare(&format!(
+            "PRAGMA table_info({})",
+            quote_identifier(table_name)
+        ))?;
         let mut rows = statement.query([])?;
         while let Some(row) = rows.next()? {
             let existing: String = row.get(1)?;
@@ -80,7 +97,11 @@ impl WarderDb {
             }
         }
         self.conn.execute(
-            &format!("ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"),
+            &format!(
+                "ALTER TABLE {} ADD COLUMN {} {column_type}",
+                quote_identifier(table_name),
+                quote_identifier(column_name)
+            ),
             [],
         )?;
         Ok(())
@@ -540,6 +561,76 @@ impl WarderDb {
         }
         Ok(events)
     }
+}
+
+fn prepare_db_path(path: &Path) -> DbResult<()> {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        if !parent.exists() {
+            fs::create_dir_all(parent)?;
+            set_private_dir_permissions(parent)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_private_dir_permissions(path: &Path) -> DbResult<()> {
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn set_private_dir_permissions(_path: &Path) -> DbResult<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_db_file_permissions(path: &Path) -> DbResult<()> {
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn set_db_file_permissions(_path: &Path) -> DbResult<()> {
+    Ok(())
+}
+
+fn validate_migration_column(
+    table_name: &str,
+    column_name: &str,
+    column_type: &str,
+) -> DbResult<()> {
+    let allowed = matches!(
+        (table_name, column_name, column_type),
+        ("sessions", "agent_profile", "TEXT")
+            | (
+                "sessions",
+                "dependency_file_changes_json",
+                "TEXT NOT NULL DEFAULT '[]'"
+            )
+            | ("sessions", "exit_code", "INTEGER")
+            | ("sessions", "snapshot_root", "TEXT")
+            | (
+                "file_journal_events",
+                "attribution",
+                "TEXT NOT NULL DEFAULT 'unknown'"
+            )
+    );
+    if allowed {
+        Ok(())
+    } else {
+        Err(DbError::InvalidValue {
+            field: "migration_column",
+            value: format!("{table_name}.{column_name} {column_type}"),
+        })
+    }
+}
+
+fn quote_identifier(identifier: &str) -> String {
+    format!("\"{}\"", identifier.replace('"', "\"\""))
 }
 
 pub const MIGRATIONS: &str = include_str!("../migrations/0001_initial.sql");
