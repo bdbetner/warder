@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::process::ExitStatus;
 use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde::Serialize;
 #[cfg(unix)]
@@ -1766,7 +1766,7 @@ pub fn create_run_session(
     let db = WarderDb::open(&db_path).map_err(db_error)?;
     db.migrate().map_err(db_error)?;
 
-    let session_id = generate_session_id(now, db.list_sessions().map_err(db_error)?.len());
+    let session_id = generate_session_id();
     let snapshot_status =
         planned_snapshot_status(&config, environment, &session_id, snapshot_root.as_deref())?;
     append_snapshot_status_warning(&snapshot_status, &mut validation_warnings);
@@ -5713,12 +5713,8 @@ fn default_daemon_runtime_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".warder/daemon.state"))
 }
 
-fn generate_session_id(now: SystemTime, sequence: usize) -> String {
-    let seconds = now
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(Duration::ZERO)
-        .as_secs();
-    format!("session-{seconds}-{sequence}")
+fn generate_session_id() -> String {
+    format!("session-{}", uuid::Uuid::new_v4().simple())
 }
 
 fn planned_snapshot_status(

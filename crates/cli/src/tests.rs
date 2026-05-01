@@ -1585,7 +1585,7 @@ fn create_run_session_loads_config_and_persists_pending_session() {
     )
     .unwrap();
 
-    assert_eq!(outcome.session_id, "session-1800000000-0");
+    assert_valid_random_session_id(&outcome.session_id);
     assert!(outcome
         .validation_warnings
         .iter()
@@ -2113,7 +2113,7 @@ fn prepare_supervised_run_records_session_and_applies_cgroup_tag() {
     )
     .unwrap();
 
-    assert_eq!(outcome.session_id, "session-1800000000-0");
+    assert_valid_random_session_id(&outcome.session_id);
     let db = WarderDb::open(db_path).unwrap();
     db.migrate().unwrap();
     let session = db.get_session(&outcome.session_id).unwrap().unwrap();
@@ -2396,9 +2396,8 @@ fn launch_supervised_run_persists_inotify_file_journal_events() {
 
     let db = WarderDb::open(db_path).unwrap();
     db.migrate().unwrap();
-    let events = db
-        .list_file_journal_events(Some("session-1800000000-0"))
-        .unwrap();
+    let session_id = db.list_sessions().unwrap()[0].id.clone();
+    let events = db.list_file_journal_events(Some(&session_id)).unwrap();
     assert!(events.iter().any(|event| {
         event.protected_zone_id == Some("notes".to_string())
             && event.path == protected_root.join("todo.md")
@@ -2460,9 +2459,8 @@ fn launch_supervised_run_persists_inotify_events_inside_created_directories() {
 
     let db = WarderDb::open(db_path).unwrap();
     db.migrate().unwrap();
-    let events = db
-        .list_file_journal_events(Some("session-1800000000-0"))
-        .unwrap();
+    let session_id = db.list_sessions().unwrap()[0].id.clone();
+    let events = db.list_file_journal_events(Some(&session_id)).unwrap();
     assert!(events.iter().any(|event| {
         event.protected_zone_id == Some("notes".to_string())
             && event.path == dynamic_root.join("todo.md")
@@ -5584,6 +5582,24 @@ impl warder_journal::EbpfFileAccessReader for FakeEbpfReader {
 
 fn fixed_time() -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(1_800_000_000)
+}
+
+fn assert_valid_random_session_id(session_id: &str) {
+    assert!(session_id.starts_with("session-"));
+    assert_eq!(session_id.len(), "session-".len() + 32);
+    assert!(session_id["session-".len()..]
+        .bytes()
+        .all(|byte| byte.is_ascii_hexdigit()));
+}
+
+#[test]
+fn generate_session_id_returns_unique_random_style_ids() {
+    let first = generate_session_id();
+    let second = generate_session_id();
+
+    assert_valid_random_session_id(&first);
+    assert_valid_random_session_id(&second);
+    assert_ne!(first, second);
 }
 
 fn receipt_test_session() -> SessionRecord {
