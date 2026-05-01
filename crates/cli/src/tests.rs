@@ -1609,6 +1609,59 @@ fn create_run_session_loads_config_and_persists_pending_session() {
 }
 
 #[test]
+fn create_run_session_persists_allowed_destination_non_enforcement_warning() {
+    let config_path = temp_file("warder-cli-network-allowlist-config", "toml");
+    let db_path = temp_file("warder-cli-network-allowlist-db", "sqlite3");
+    std::fs::write(
+        &config_path,
+        r#"
+                [enforcement]
+                landlock = "disabled"
+                cgroups = "disabled"
+
+                [network]
+                journal = false
+                allowed-destinations = ["example.com:443"]
+
+                [[zones]]
+                id = "notes"
+                name = "Notes"
+                paths = ["/tmp/notes"]
+                snapshot = "disabled"
+
+                [[agents]]
+                id = "local"
+                label = "Local Agent"
+                command = "agent-command"
+            "#,
+    )
+    .unwrap();
+    let command = CliCommand::Run {
+        config: Some(config_path),
+        db: Some(db_path.clone()),
+        cgroup_root: None,
+        snapshot_root: None,
+        launch: false,
+        agent: "local".to_string(),
+        command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+    };
+
+    let outcome = create_run_session(&command, &supported_environment(), fixed_time()).unwrap();
+
+    assert!(outcome
+        .validation_warnings
+        .iter()
+        .any(|warning| warning.contains("network.allowed_destinations is configured")));
+    let db = WarderDb::open(db_path).unwrap();
+    db.migrate().unwrap();
+    let session = db.get_session(&outcome.session_id).unwrap().unwrap();
+    assert!(session
+        .degraded_reasons
+        .iter()
+        .any(|reason| reason.contains("does not enforce destination allowlists yet")));
+}
+
+#[test]
 fn create_run_session_rejects_required_snapshot_without_snapshot_root() {
     let config_path = temp_file("warder-cli-required-snapshot-unwired-config", "toml");
     let db_path = temp_file("warder-cli-required-snapshot-unwired-db", "sqlite3");
@@ -4472,6 +4525,82 @@ fn render_policy_explain_reports_network_journal_degraded_until_ebpf_attach_is_w
         "warning: eBPF network journaling unavailable: live attach is not implemented yet"
     ));
     assert!(!explanation.contains("validation: ok"));
+}
+
+#[test]
+fn render_policy_explain_warns_allowed_destinations_are_not_enforced() {
+    let config_path = temp_file("warder-cli-explain-network-allowlist-config", "toml");
+    std::fs::write(
+        &config_path,
+        r#"
+                [enforcement]
+                landlock = "disabled"
+                cgroups = "disabled"
+
+                [network]
+                journal = false
+                allowed-destinations = ["example.com:443"]
+
+                [[zones]]
+                id = "notes"
+                name = "Notes"
+                paths = ["/tmp/warder-notes"]
+                snapshot = "disabled"
+
+                [[agents]]
+                id = "local"
+                label = "Local Agent"
+                command = "agent-command"
+            "#,
+    )
+    .unwrap();
+
+    let explanation =
+        render_policy_explain_from_config(Some(config_path), &supported_environment()).unwrap();
+
+    assert!(explanation.contains("network.allowed_destinations is configured"));
+    assert!(explanation.contains("does not enforce destination allowlists yet"));
+    assert!(!explanation.contains("validation: ok"));
+}
+
+#[test]
+fn dry_run_warns_allowed_destinations_are_not_enforced() {
+    let config_path = temp_file("warder-cli-dry-run-network-allowlist-config", "toml");
+    std::fs::write(
+        &config_path,
+        r#"
+                [enforcement]
+                landlock = "disabled"
+                cgroups = "disabled"
+
+                [network]
+                journal = false
+                allowed-destinations = ["example.com:443"]
+
+                [[zones]]
+                id = "notes"
+                name = "Notes"
+                paths = ["/tmp/warder-notes"]
+                snapshot = "disabled"
+
+                [[agents]]
+                id = "local"
+                label = "Local Agent"
+                command = "agent-command"
+            "#,
+    )
+    .unwrap();
+
+    let dry_run = render_dry_run_from_config(
+        Some(config_path),
+        "local",
+        &["sh".to_string(), "-c".to_string(), "true".to_string()],
+        &supported_environment(),
+    )
+    .unwrap();
+
+    assert!(dry_run.contains("network.allowed_destinations is configured"));
+    assert!(dry_run.contains("observation-only"));
 }
 
 #[test]
