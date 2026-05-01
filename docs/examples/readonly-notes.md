@@ -37,8 +37,8 @@ warder run --config warder.toml --launch --agent local-shell -- sh -c 'ls /home/
 ## Review
 
 ```bash
-warder receipt --db .warder/warder.db --session <session-id>
-warder journal --db .warder/warder.db --session <session-id> --file
+warder receipt --session <session-id>
+warder journal --session <session-id> --file
 ```
 
 This pattern is for local read-only inspection. Do not use it as a promise that sensitive note contents cannot be copied elsewhere.

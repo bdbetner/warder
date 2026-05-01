@@ -5736,6 +5736,32 @@ fn generate_session_id_returns_unique_random_style_ids() {
     assert_ne!(first, second);
 }
 
+#[test]
+fn xdg_path_helpers_use_user_scoped_defaults() {
+    assert_eq!(
+        xdg_data_home(None, Some(PathBuf::from("/home/alice"))),
+        PathBuf::from("/home/alice/.local/share")
+    );
+    assert_eq!(
+        xdg_state_home(None, Some(PathBuf::from("/home/alice"))),
+        PathBuf::from("/home/alice/.local/state")
+    );
+    assert_eq!(
+        xdg_data_home(
+            Some(PathBuf::from("/tmp/data")),
+            Some(PathBuf::from("/home/alice"))
+        ),
+        PathBuf::from("/tmp/data")
+    );
+    assert_eq!(
+        xdg_state_home(
+            Some(PathBuf::from("/tmp/state")),
+            Some(PathBuf::from("/home/alice"))
+        ),
+        PathBuf::from("/tmp/state")
+    );
+}
+
 fn receipt_test_session() -> SessionRecord {
     SessionRecord {
         id: "session-1".to_string(),
