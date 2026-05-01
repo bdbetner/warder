@@ -2,7 +2,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::OpenOptionsExt;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EnforcementMode {
@@ -175,8 +175,54 @@ fn validate_landlock_write_rules(rules: &[LandlockRule]) -> Option<String> {
     None
 }
 
-fn paths_overlap(left: &std::path::Path, right: &std::path::Path) -> bool {
-    left == right || left.starts_with(right) || right.starts_with(left)
+fn paths_overlap(left: &Path, right: &Path) -> bool {
+    let left = normalized_existing_or_lexical(left);
+    let right = normalized_existing_or_lexical(right);
+    left == right || left.starts_with(&right) || right.starts_with(&left)
+}
+
+fn normalized_existing_or_lexical(path: &Path) -> PathBuf {
+    path.canonicalize()
+        .unwrap_or_else(|_| lexical_normalize(path))
+}
+
+fn lexical_normalize(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir | Component::Normal(_) => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+}
+
+fn checked_landlock_rule_path(path: &Path) -> Result<PathBuf, LandlockApplyError> {
+    let metadata = fs::symlink_metadata(path).map_err(|source| LandlockApplyError {
+        message: format!(
+            "failed to inspect Landlock rule path '{}': {source}",
+            path.display()
+        ),
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(LandlockApplyError {
+            message: format!(
+                "Landlock rule path '{}' must not be a symlink",
+                path.display()
+            ),
+        });
+    }
+
+    path.canonicalize().map_err(|source| LandlockApplyError {
+        message: format!(
+            "failed to canonicalize Landlock rule path '{}': {source}",
+            path.display()
+        ),
+    })
 }
 
 pub fn apply_landlock_plan_with_kernel(
@@ -271,13 +317,14 @@ impl LandlockKernel for SyscallLandlockKernel {
         rule: &LandlockRule,
         allowed_access: u64,
     ) -> Result<(), LandlockApplyError> {
+        let checked_path = checked_landlock_rule_path(&rule.path)?;
         let file = OpenOptions::new()
             .custom_flags(libc::O_PATH | libc::O_CLOEXEC)
-            .open(&rule.path)
+            .open(&checked_path)
             .map_err(|source| LandlockApplyError {
                 message: format!(
                     "failed to open Landlock rule path '{}': {source}",
-                    rule.path.display()
+                    checked_path.display()
                 ),
             })?;
         let parent_fd = std::os::fd::AsRawFd::as_raw_fd(&file);
@@ -582,6 +629,38 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn landlock_plan_blocks_canonical_symlink_overlap() {
+        let root = temp_path("canonical-symlink-overlap");
+        let target = root.join("target");
+        let link = root.join("link");
+        fs::create_dir_all(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        let plan = plan_landlock_restrictions(
+            LandlockRequirement::Required,
+            LandlockSupport {
+                kernel_available: true,
+                apply_available: true,
+            },
+            vec![
+                LandlockRule {
+                    path: target,
+                    access: LandlockAccess::ReadWrite,
+                },
+                LandlockRule {
+                    path: link,
+                    access: LandlockAccess::ReadOnly,
+                },
+            ],
+        );
+
+        assert!(
+            matches!(plan.status, LandlockPlanStatus::Blocked(message) if message.contains("overlap"))
+        );
+    }
+
     #[test]
     fn landlock_plan_allows_unrelated_writable_roots() {
         let plan = plan_landlock_restrictions(
@@ -666,6 +745,31 @@ mod tests {
             vec![(7, PathBuf::from("/tmp/readonly"), 0)]
         );
         assert!(kernel.restricted_rulesets.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn landlock_rule_path_rejects_final_symlink() {
+        let root = temp_path("rule-final-symlink");
+        let target = root.join("target");
+        let link = root.join("link");
+        fs::create_dir_all(&target).unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        let error = checked_landlock_rule_path(&link).unwrap_err();
+
+        assert!(error.message.contains("must not be a symlink"));
+    }
+
+    #[test]
+    fn landlock_rule_path_returns_canonical_existing_path() {
+        let root = temp_path("rule-canonical-path");
+        let nested = root.join("nested");
+        fs::create_dir_all(&nested).unwrap();
+
+        let checked = checked_landlock_rule_path(&root.join(".").join("nested")).unwrap();
+
+        assert_eq!(checked, nested.canonicalize().unwrap());
     }
 
     #[test]
