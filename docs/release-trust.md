@@ -41,7 +41,7 @@ package-smoke verification.
 Use this flow before installing a downloaded alpha release:
 
 ```bash
-gh release download v0.1.0-alpha.10 --repo betnbd/warder --dir warder-linux-x86_64
+gh release download v0.1.0-alpha.11 --repo betnbd/warder --dir warder-linux-x86_64
 cd warder-linux-x86_64
 sha256sum --check SHA256SUMS
 python3 -m json.tool release-manifest.json >/dev/null

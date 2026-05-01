@@ -19,7 +19,7 @@ For the current alpha, the lowest-risk review path is the `.deb` or RPM because 
 Download a tagged alpha release and verify it:
 
 ```bash
-gh release download v0.1.0-alpha.10 --repo betnbd/warder --dir warder-linux-x86_64
+gh release download v0.1.0-alpha.11 --repo betnbd/warder --dir warder-linux-x86_64
 cd warder-linux-x86_64
 sha256sum --check SHA256SUMS
 python3 -m json.tool release-manifest.json >/dev/null
@@ -38,7 +38,7 @@ gh attestation verify Warder_0.1.0_amd64.AppImage --repo betnbd/warder
 ### Ubuntu/Debian Copy-Paste Flow
 
 ```bash
-gh release download v0.1.0-alpha.10 --repo betnbd/warder --dir warder-linux-x86_64
+gh release download v0.1.0-alpha.11 --repo betnbd/warder --dir warder-linux-x86_64
 cd warder-linux-x86_64
 sha256sum --check SHA256SUMS
 python3 -m json.tool release-manifest.json >/dev/null
@@ -50,7 +50,7 @@ warder-desktop
 ### RPM Copy-Paste Flow
 
 ```bash
-gh release download v0.1.0-alpha.10 --repo betnbd/warder --dir warder-linux-x86_64
+gh release download v0.1.0-alpha.11 --repo betnbd/warder --dir warder-linux-x86_64
 cd warder-linux-x86_64
 sha256sum --check SHA256SUMS
 python3 -m json.tool release-manifest.json >/dev/null
@@ -62,7 +62,7 @@ warder-desktop
 ### AppImage Copy-Paste Flow
 
 ```bash
-gh release download v0.1.0-alpha.10 --repo betnbd/warder --dir warder-linux-x86_64
+gh release download v0.1.0-alpha.11 --repo betnbd/warder --dir warder-linux-x86_64
 cd warder-linux-x86_64
 sha256sum --check SHA256SUMS
 python3 -m json.tool release-manifest.json >/dev/null
