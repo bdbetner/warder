@@ -1,4 +1,8 @@
-# Warder
+<p align="center">
+  <img src="apps/desktop/src-tauri/icons/icon.png" alt="Warder logo" width="120" height="120">
+</p>
+
+<h1 align="center">Warder</h1>
 
 [![CI](https://github.com/betnbd/warder/actions/workflows/ci.yml/badge.svg)](https://github.com/betnbd/warder/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/betnbd/warder?include_prereleases&label=release)](https://github.com/betnbd/warder/releases)
