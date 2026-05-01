@@ -8,6 +8,8 @@ Warder's strongest current protection is filesystem write denial for supervised 
 
 Warder only supervises commands launched through `warder run`. It does not protect against processes started outside Warder.
 
+Several security-hardening items are still open in the alpha: snapshot ids need stricter validation before restore path construction, local SQLite state needs stronger permissions and concurrency settings, session ids are not yet random, cgroup tagging can lag process spawn, and path canonicalization must be made consistent across config, policy, and enforcement planning.
+
 ## What Warder Uses
 
 - cgroups to identify agent sessions
@@ -28,6 +30,8 @@ Expected degraded cases include missing cgroup delegation, unavailable Landlock 
 Warder stores local metadata in SQLite. Warder should not upload session data or call external services as part of the core supervision path.
 
 Local receipts and journals are accountability records, not tamper-proof forensics. A local user or malware with filesystem access can modify local files.
+
+Until receipt signing and stronger state-file controls are implemented, do not use Warder receipts as forensic evidence against a process that could also modify Warder's local state directory.
 
 ## Before Relying On Warder
 
