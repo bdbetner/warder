@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-111827.svg)](#current-status)
 
-Warder is a Linux safety layer for running local AI agents with protected zones, supervised sessions, and readable receipts.
+Warder is an alpha Linux safety tool for running local AI agents with protected zones, supervised sessions, and readable receipts.
 
 It lets you declare protected folders, launch an agent through Warder, and get a receipt that explains what the session was allowed to do, what Warder observed, which protections were active, and where host support was missing.
 

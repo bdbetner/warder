@@ -1,6 +1,6 @@
 # Warder Documentation
 
-Warder is a Linux safety layer for local agent sessions. Start with the page that matches what you are trying to do.
+Warder is an alpha Linux safety tool for supervised local agent sessions. Start with the page that matches what you are trying to do.
 
 ## Try Warder
 
@@ -16,6 +16,7 @@ Warder is a Linux safety layer for local agent sessions. Start with the page tha
 - [Threat Model](../THREAT_MODEL.md): risks Warder is designed around.
 - [Permissions](permissions.md): how policy choices are framed.
 - [Release Trust Model](release-trust.md): how to verify alpha artifacts.
+- [Security Review Triage](security-review-triage.md): current hardening priorities from independent review.
 
 ## Understand The Project
 

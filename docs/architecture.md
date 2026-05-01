@@ -18,18 +18,23 @@ Warder is a Linux-first CLI and desktop app with small Rust crates for policy, s
 
 The daemon crate is experimental. It can model start/status/stop state and host capability ticks, but it does not orchestrate normal supervised sessions, cgroups, Landlock, snapshots, or journals.
 
+Do not treat `warder start` as an always-on enforcement mode. The current production path is the CLI-supervised `warder run` flow.
+
 ## Session Flow
 
 1. User declares protected zones in config.
 2. User starts an agent through `warder run ...`.
 3. Warder creates a session record.
-4. Warder tags the process tree with a session/agent cgroup where possible.
+4. Warder prepares pre-launch controls such as snapshots and Landlock setup.
 5. Warder creates a snapshot when policy requires it.
 6. Warder applies Landlock restrictions before launching the agent.
-7. Warder watches protected paths with inotify.
-8. Warder records file and network activity where supported.
-9. Warder writes a readable session timeline.
-10. User can inspect the journal or revert a supported snapshot.
+7. Warder tags the launched process with a session/agent cgroup where possible.
+8. Warder watches protected paths with inotify.
+9. Warder records file and network activity where supported.
+10. Warder writes a readable session timeline.
+11. User can inspect the journal or revert a supported snapshot.
+
+The current cgroup tag is applied after process spawn. That is a known attribution race for journals and process-tree accounting. Landlock setup uses the child setup path, but receipts still need to report cgroup timing and tagging failures as coverage risks.
 
 ## Degraded Mode
 
