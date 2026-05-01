@@ -4183,6 +4183,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "uuid",
  "warder-config",
  "warder-core",
  "warder-daemon",
