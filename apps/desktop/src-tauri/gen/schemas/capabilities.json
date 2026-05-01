@@ -1,1 +1,1 @@
-{}
+{"main":{"identifier":"main","description":"Main Warder desktop window. Filesystem access, process launch, receipts, and journals are mediated by validated Rust commands rather than broad Tauri plugins.","local":true,"windows":["main"],"permissions":["core:default"]}}

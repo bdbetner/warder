@@ -110,6 +110,23 @@ fn desktop_receipt_reader_rejects_invalid_session_ids() {
 }
 
 #[test]
+fn desktop_capability_file_keeps_plugin_permissions_narrow() {
+    let capability_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("capabilities/main.json");
+    let capability = std::fs::read_to_string(capability_path).expect("capability file");
+
+    assert!(capability.contains("\"windows\": [\"main\"]"));
+    assert!(capability.contains("\"core:default\""));
+    for forbidden in [
+        "fs:", "shell:", "dialog:", "http:", "updater:", "opener:", "process:",
+    ] {
+        assert!(
+            !capability.contains(forbidden),
+            "desktop capability should not include broad plugin permission {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn host_readiness_is_available_to_frontend() {
     let readiness = host_readiness().expect("host readiness");
 

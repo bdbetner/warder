@@ -8,7 +8,7 @@ Warder's strongest current protection is filesystem write denial for supervised 
 
 Warder only supervises commands launched through `warder run`. It does not protect against processes started outside Warder.
 
-Several security-hardening items are still open in the alpha: snapshot ids need stricter validation before restore path construction, local SQLite state needs stronger permissions and concurrency settings, session ids are not yet random, cgroup tagging can lag process spawn, receipt signing still uses local shared-secret keys rather than public-key signatures, and path canonicalization must be made consistent across config, policy, and enforcement planning.
+Several security-hardening limits remain in the alpha: cgroup tagging can lag process spawn, receipt signing uses local shared-secret keys rather than public-key signatures, network destination allowlists are not enforced, file and network journals have known coverage gaps, and the desktop app must keep its IPC surface narrow as the UI grows.
 
 ## What Warder Uses
 
@@ -45,6 +45,7 @@ Check these items for the specific machine and session:
 - Does revert work on the chosen snapshot backend?
 - Does the journal show file activity in readable form?
 - Does network journal output explain its coverage limits?
+- Are receipt signing keys stored outside any path the supervised command can write?
 - Are common secret paths denied or warned about by default?
 
 ## Reporting Security Issues

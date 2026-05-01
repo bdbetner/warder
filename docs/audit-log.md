@@ -49,10 +49,11 @@ Receipts and journal output should keep these limits visible whenever network ev
 Receipts can be signed with a local HMAC-SHA256 key file:
 
 ```bash
+warder receipt-key init --output ~/.local/state/warder/receipt-signing.key
 warder receipt --db .warder/warder.db --session <session-id> --signing-key-file <path>
 ```
 
-The key file must contain at least 32 bytes after trailing line endings are trimmed. Keep it outside any path the supervised command can write.
+The key file must contain at least 32 bytes after trailing line endings are trimmed. On Unix-like systems, Warder refuses signing keys that are readable or writable by group/other users. Keep the key outside any path the supervised command can write.
 
 To verify a receipt signature, render the same receipt format with the same key and pass the expected hex signature:
 

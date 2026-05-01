@@ -215,6 +215,12 @@ fn main() {
                 Err(error) => exit_with_error(error),
             }
         }
+        Ok(warder_cli::CliCommand::ReceiptKey { output, force }) => {
+            match warder_cli::initialize_receipt_signing_key(output, force) {
+                Ok(status) => println!("{status}"),
+                Err(error) => exit_with_error(error),
+            }
+        }
         Ok(warder_cli::CliCommand::Snapshot {
             session_id,
             config: Some(config),

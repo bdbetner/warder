@@ -759,6 +759,25 @@ fn parses_receipt_command_with_signing_options() {
 }
 
 #[test]
+fn parses_receipt_key_init_command() {
+    assert_eq!(
+        parse_args([
+            "warder",
+            "receipt-key",
+            "init",
+            "--output",
+            "/tmp/warder.key",
+            "--force",
+        ])
+        .unwrap(),
+        CliCommand::ReceiptKey {
+            output: PathBuf::from("/tmp/warder.key"),
+            force: true,
+        }
+    );
+}
+
+#[test]
 fn receipt_command_rejects_unknown_format() {
     let error = parse_args([
         "warder",
@@ -4092,7 +4111,7 @@ fn render_session_receipt_from_db_supports_json_format() {
 fn render_session_receipt_from_db_can_sign_and_verify_text_receipts() {
     let db_path = temp_file("warder-cli-receipt-signing-db", "sqlite3");
     let key_path = temp_file("warder-cli-receipt-signing-key", "key");
-    std::fs::write(&key_path, b"0123456789abcdef0123456789abcdef").unwrap();
+    initialize_receipt_signing_key(&key_path, true).unwrap();
     let db = WarderDb::open(&db_path).unwrap();
     db.migrate().unwrap();
     db.create_session(&receipt_test_session()).unwrap();
@@ -4129,7 +4148,7 @@ fn render_session_receipt_from_db_can_sign_and_verify_text_receipts() {
 fn render_session_receipt_from_db_rejects_bad_signature() {
     let db_path = temp_file("warder-cli-receipt-bad-signing-db", "sqlite3");
     let key_path = temp_file("warder-cli-receipt-bad-signing-key", "key");
-    std::fs::write(&key_path, b"0123456789abcdef0123456789abcdef").unwrap();
+    initialize_receipt_signing_key(&key_path, true).unwrap();
     let db = WarderDb::open(&db_path).unwrap();
     db.migrate().unwrap();
     db.create_session(&receipt_test_session()).unwrap();
@@ -4146,6 +4165,45 @@ fn render_session_receipt_from_db_rejects_bad_signature() {
     assert_eq!(error.message, "receipt signature verification failed");
 
     let _ = std::fs::remove_file(db_path);
+    let _ = std::fs::remove_file(key_path);
+}
+
+#[test]
+fn initialize_receipt_signing_key_creates_private_key_file() {
+    let key_path = temp_file("warder-cli-receipt-init-key", "key");
+    let _ = std::fs::remove_file(&key_path);
+
+    let status = initialize_receipt_signing_key(&key_path, false).unwrap();
+    let key = read_receipt_signing_key(&key_path).unwrap();
+
+    assert!(status.contains("receipt signing key initialized"));
+    assert!(key.len() >= 32);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mode = std::fs::metadata(&key_path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+
+    let _ = std::fs::remove_file(key_path);
+}
+
+#[cfg(unix)]
+#[test]
+fn receipt_signing_key_rejects_group_readable_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let key_path = temp_file("warder-cli-receipt-world-readable-key", "key");
+    std::fs::write(&key_path, b"0123456789abcdef0123456789abcdef").unwrap();
+    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+    let error = read_receipt_signing_key(&key_path).unwrap_err();
+
+    assert!(error
+        .message
+        .contains("must not be readable or writable by group/other"));
+
     let _ = std::fs::remove_file(key_path);
 }
 

@@ -30,13 +30,13 @@ A protected zone is a named set of paths with policy. Paths are explicit and loc
 
 Each supervised run has a session id, agent label, process metadata, and cgroup tagging state. If Warder cannot tag the process tree, the session must report degraded enforcement.
 
-Current session ids are local receipt identifiers, not secrets or authentication tokens. The alpha should replace predictable ids with random ids before relying on them for privacy-sensitive workflows.
+Session ids are random local receipt identifiers, not secrets or authentication tokens. They are suitable for lookup and correlation, but they should not be used as proof of identity or authorization.
 
 ## Filesystem Enforcement
 
-Landlock is the preferred mechanism for preventing writes to protected paths. Path checks must canonicalize where possible and handle symlink/traversal cases deliberately.
+Landlock is the preferred mechanism for preventing writes to protected paths. Path checks canonicalize where possible and reject traversal or unsafe overlaps in config, policy, snapshot, and enforcement planning paths. Missing paths and symlinks are handled deliberately so receipts can describe what was actually enforced or degraded.
 
-Path canonicalization is a hardening priority. Config validation, policy checks, snapshot restore inputs, and enforcement planning must converge on one tested path-normalization model so symlink and traversal behavior is deliberate rather than accidental.
+Snapshot ids are validated before restore path construction. Restore planning must continue to reject path separators, traversal, absolute paths, and empty ids before joining anything below a snapshot root.
 
 ## Observation
 

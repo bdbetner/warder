@@ -4,7 +4,7 @@ Warder is currently an alpha Linux safety tool for local agent sessions. The CLI
 
 ## Current Alpha Focus
 
-- Fix the highest-confidence security review findings before expanding feature scope.
+- Keep the completed security-review fixes covered by regression tests before expanding feature scope.
 - Keep README, install, release, and security docs aligned with the real implementation.
 - Make receipt and dry-run output impossible to confuse with stronger enforcement than Warder currently provides.
 - Improve protected-zone templates for common secrets and personal data.
@@ -13,16 +13,18 @@ Warder is currently an alpha Linux safety tool for local agent sessions. The CLI
 
 ## Security Hardening Backlog
 
-These items take priority over new integrations:
+These review-driven items are implemented and should remain protected by tests:
 
 - Validate snapshot ids before any snapshot-root path construction or restore planning.
 - Harden local SQLite state with restrictive permissions, WAL/busy-timeout behavior, and safer migration identifier handling.
-- Replace predictable timestamp-based session ids with random session ids.
+- Use random session ids for local receipt/session identifiers.
 - Unify path canonicalization and traversal handling across config validation, policy decisions, and Landlock enforcement planning.
-- Reduce the cgroup spawn/tag attribution race, and keep receipts honest when a race or tagging failure leaves journal coverage incomplete.
+- Report the cgroup spawn/tag attribution race when journal coverage may be incomplete.
 - Warn clearly when `network.allowed_destinations` is configured, because destination policy is not enforced in the current alpha.
-- Continue migration/compatibility polish for stable user-scoped XDG state paths instead of per-working-directory `.warder` paths.
-- Add adversarial tests for symlink/traversal paths, snapshot restore inputs, concurrent DB access, degraded hosts, and journal blind spots.
+- Use stable user-scoped XDG state paths by default instead of per-working-directory `.warder` paths.
+- Cover symlink/traversal paths, snapshot restore inputs, concurrent DB access, degraded hosts, and journal blind spots with focused tests.
+
+Remaining hardening should focus on receipt key management, desktop IPC/capability review, broader live-journal coverage, and release-readiness checks.
 
 ## Next Product Improvements
 
@@ -32,6 +34,7 @@ These items take priority over new integrations:
 - Better command examples for common local agent tools.
 - Clearer recovery flows around Btrfs snapshots and guarded revert.
 - More host-readiness checks in `warder doctor`.
+- Desktop review flows that preserve the narrow Rust-command IPC boundary.
 
 ## Enforcement And Observability
 
@@ -52,7 +55,7 @@ These features fit Warder only if they strengthen supervised local execution, po
 - MCP and external-tool inventory for supervised sessions.
 - Optional daemon-backed observation for long-running workflows.
 - Destination-aware network policy after live egress logging is reliable enough.
-- Receipt signing/verification after basic local state permissions and DB concurrency are hardened.
+- Public-key receipt signing or external receipt attestations after local HMAC signing remains stable.
 - Seccomp/capability-bound execution after the current Landlock/cgroup invariants are tested.
 
 ## Non-Goals

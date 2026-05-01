@@ -6,7 +6,7 @@ Warder's current alpha is a Linux tool a user can install and test quickly: decl
 
 - CLI workflow for supervised sessions.
 - Native Linux desktop companion for setup, launch, and review.
-- Commands for `init`, `explain`, `dry-run`, `run`, `receipt`, `journal`, `snapshot`, `revert`, `doctor`, `profiles`, and `status`.
+- Commands for `init`, `explain`, `dry-run`, `run`, `receipt`, `receipt-key`, `journal`, `snapshot`, `revert`, `doctor`, `profiles`, and `status`.
 - TOML and YAML config.
 - Transparent local profiles for common agent commands.
 - Protected zones with explicit path policy.
@@ -14,6 +14,7 @@ Warder's current alpha is a Linux tool a user can install and test quickly: decl
 - Tool-agnostic supervised sessions launched through `warder run`.
 - Persisted session records with lifecycle state, policy state, and degraded reasons.
 - Human-readable and JSON session receipts.
+- Local HMAC receipt signing and verification with private key-file checks.
 - Session review covering command, protected zones, file activity, degraded enforcement, snapshot state, and recovery options.
 - Landlock-backed write denial where supported.
 - inotify watches for protected paths.

@@ -7,6 +7,9 @@ use std::time::{Duration, Instant, SystemTime};
 use hmac::{Hmac, Mac};
 use serde::Serialize;
 use sha2::Sha256;
+use std::io::Read;
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use warder_config::{
@@ -77,6 +80,10 @@ pub enum CliCommand {
         format: ReceiptFormat,
         signing_key_file: Option<PathBuf>,
         verify_signature: Option<String>,
+    },
+    ReceiptKey {
+        output: PathBuf,
+        force: bool,
     },
     Snapshot {
         session_id: String,
@@ -246,6 +253,7 @@ where
         "run" => parse_run(args),
         "journal" => parse_journal(args),
         "receipt" => parse_receipt(args),
+        "receipt-key" => parse_receipt_key(args),
         "snapshot" => parse_snapshot(args),
         "revert" => parse_revert(args),
         "explain" => parse_required_value(args, "--config").map(|config| CliCommand::Explain {
@@ -388,6 +396,11 @@ pub fn command_summary(command: &CliCommand) -> String {
                 receipt_format_label(*format)
             )
         }
+        CliCommand::ReceiptKey { output, force } => format!(
+            "receipt signing key initialization requested at '{}'{}",
+            output.display(),
+            if *force { " with overwrite" } else { "" }
+        ),
         CliCommand::Snapshot {
             session_id,
             config: Some(config),
@@ -1508,6 +1521,7 @@ fn structured_receipt_with_activity(
 }
 
 fn read_receipt_signing_key(path: &Path) -> Result<Vec<u8>, CliError> {
+    validate_receipt_signing_key_file(path)?;
     let key = std::fs::read(path).map_err(|error| CliError {
         message: format!(
             "failed to read receipt signing key '{}': {error}",
@@ -1524,6 +1538,128 @@ fn read_receipt_signing_key(path: &Path) -> Result<Vec<u8>, CliError> {
         return err("receipt signing key must be at least 32 bytes");
     }
     Ok(key)
+}
+
+pub fn initialize_receipt_signing_key(
+    output: impl AsRef<Path>,
+    force: bool,
+) -> Result<String, CliError> {
+    let output = output.as_ref();
+    if output.exists() && !force {
+        return err(format!(
+            "receipt signing key '{}' already exists; pass --force to overwrite",
+            output.display()
+        ));
+    }
+    if let Some(parent) = output.parent() {
+        let parent_existed = parent.exists();
+        std::fs::create_dir_all(parent).map_err(|error| CliError {
+            message: format!(
+                "failed to create receipt signing key directory '{}': {error}",
+                parent.display()
+            ),
+        })?;
+        if !parent_existed {
+            restrict_private_directory(parent)?;
+        }
+    }
+
+    let mut random = [0_u8; 32];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut file| file.read_exact(&mut random))
+        .map_err(|error| CliError {
+            message: format!("failed to generate receipt signing key material: {error}"),
+        })?;
+    let key = format!("{}\n", hex_encode(&random));
+
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    if !force {
+        options.create_new(true);
+    }
+    #[cfg(unix)]
+    options.mode(0o600);
+    std::io::Write::write_all(
+        &mut options.open(output).map_err(|error| CliError {
+            message: format!(
+                "failed to create receipt signing key '{}': {error}",
+                output.display()
+            ),
+        })?,
+        key.as_bytes(),
+    )
+    .map_err(|error| CliError {
+        message: format!(
+            "failed to write receipt signing key '{}': {error}",
+            output.display()
+        ),
+    })?;
+    restrict_private_file(output)?;
+
+    Ok(format!(
+        "receipt signing key initialized: {}\nnext: warder receipt --session <id> --signing-key-file {}",
+        output.display(),
+        shell_quote(&output.display().to_string())
+    ))
+}
+
+fn validate_receipt_signing_key_file(path: &Path) -> Result<(), CliError> {
+    let metadata = std::fs::metadata(path).map_err(|error| CliError {
+        message: format!(
+            "failed to inspect receipt signing key '{}': {error}",
+            path.display()
+        ),
+    })?;
+    if !metadata.is_file() {
+        return err(format!(
+            "receipt signing key '{}' must be a regular file",
+            path.display()
+        ));
+    }
+    #[cfg(unix)]
+    {
+        let mode = metadata.permissions().mode();
+        if mode & 0o077 != 0 {
+            return err(format!(
+                "receipt signing key '{}' must not be readable or writable by group/other; run chmod 600 {}",
+                path.display(),
+                shell_quote(&path.display().to_string())
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn restrict_private_directory(path: &Path) -> Result<(), CliError> {
+    #[cfg(unix)]
+    {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).map_err(
+            |error| CliError {
+                message: format!(
+                    "failed to restrict directory permissions for '{}': {error}",
+                    path.display()
+                ),
+            },
+        )?;
+    }
+    let _ = path;
+    Ok(())
+}
+
+fn restrict_private_file(path: &Path) -> Result<(), CliError> {
+    #[cfg(unix)]
+    {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).map_err(
+            |error| CliError {
+                message: format!(
+                    "failed to restrict file permissions for '{}': {error}",
+                    path.display()
+                ),
+            },
+        )?;
+    }
+    let _ = path;
+    Ok(())
 }
 
 fn sign_receipt_payload(payload: &[u8], key: &[u8]) -> Result<String, CliError> {
@@ -1897,6 +2033,7 @@ profiles: warder profiles [--format text|json]\n\
 snapshot: warder snapshot --config <path> --session <id> --snapshot-root <path>\n\
 recovery: warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]\n\
 inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>] [--verify-signature <hex>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status\n\
+keys: warder receipt-key init [--output <path>] [--force]\n\
 daemon optional: warder start|stop"
 }
 
@@ -2502,6 +2639,34 @@ fn parse_receipt(args: Vec<String>) -> Result<CliCommand, CliError> {
         signing_key_file,
         verify_signature,
     })
+}
+
+fn parse_receipt_key(args: Vec<String>) -> Result<CliCommand, CliError> {
+    let Some(subcommand) = args.first() else {
+        return err("receipt-key requires subcommand 'init'");
+    };
+    if subcommand != "init" {
+        return err(format!("unknown receipt-key subcommand '{subcommand}'"));
+    }
+
+    let mut output = default_receipt_signing_key_path();
+    let mut force = false;
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--output" => {
+                output = PathBuf::from(value_after(&args, index, "--output")?);
+                index += 2;
+            }
+            "--force" => {
+                force = true;
+                index += 1;
+            }
+            unknown => return err(format!("unknown receipt-key option '{unknown}'")),
+        }
+    }
+
+    Ok(CliCommand::ReceiptKey { output, force })
 }
 
 fn parse_profiles(args: Vec<String>) -> Result<CliCommand, CliError> {
@@ -6221,6 +6386,19 @@ fn default_db_path() -> PathBuf {
             )
             .join("warder")
             .join("warder.sqlite3")
+        })
+}
+
+fn default_receipt_signing_key_path() -> PathBuf {
+    std::env::var_os("WARDER_RECEIPT_SIGNING_KEY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            xdg_state_home(
+                std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
+                std::env::var_os("HOME").map(PathBuf::from),
+            )
+            .join("warder")
+            .join("receipt-signing.key")
         })
 }
 

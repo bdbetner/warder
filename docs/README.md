@@ -13,6 +13,7 @@ Warder is an alpha Linux safety tool for supervised local agent sessions. Start 
 ## Understand The Safety Model
 
 - [Security Model](security-model.md): what Warder enforces, observes, and reports.
+- [Desktop Security](desktop-security.md): Tauri IPC and capability boundaries.
 - [Threat Model](../THREAT_MODEL.md): risks Warder is designed around.
 - [Permissions](permissions.md): how policy choices are framed.
 - [Release Trust Model](release-trust.md): how to verify alpha artifacts.
@@ -23,6 +24,7 @@ Warder is an alpha Linux safety tool for supervised local agent sessions. Start 
 - [Vision](vision.md): the long-term product direction.
 - [Product Overview](../PRODUCT_SPEC.md): product goals and non-goals.
 - [Roadmap](../ROADMAP.md): current and future work.
+- [Product Completion Plan](product-completion-plan.md): proposed final alpha shape.
 - [Alpha Scope](../MVP_SCOPE.md): what the current alpha includes and excludes.
 - [Architecture](architecture.md): crate layout and session flow.
 - [Journals](audit-log.md): what receipts and journals can show.
