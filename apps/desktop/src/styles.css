@@ -150,23 +150,31 @@ button:disabled {
 .brand-mark::before {
   content: "";
   position: absolute;
-  inset: 8px;
+  left: 9px;
+  top: 9px;
+  width: 21px;
+  height: 21px;
   border: 3px solid var(--gold);
-  border-radius: 50%;
+  border-right-color: transparent;
+  border-radius: 5px;
 }
 
 .brand-mark::after {
-  content: "";
+  content: "W";
   position: absolute;
-  left: 18px;
-  top: 7px;
-  width: 4px;
-  height: 27px;
-  border-radius: 3px 3px 1px 1px;
-  background: linear-gradient(90deg, #f2f7f5, #9fafad);
-  box-shadow:
-    -8px 17px 0 -1px var(--gold),
-    8px 17px 0 -1px var(--gold);
+  left: 13px;
+  top: 11px;
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #eef6f2, #d2e1d8);
+  color: #1a604f;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 9px 9px 0 -4px var(--gold);
 }
 
 .workspace {
