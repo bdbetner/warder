@@ -1,15 +1,15 @@
 # Roadmap
 
-Warder is currently an alpha Linux safety tool for local agent sessions. The CLI, receipt model, protected zones, desktop app, release artifacts, and core Linux enforcement path exist. Future work should make those paths easier to trust before expanding into broader agent-security features.
+Warder is currently an alpha Linux safety tool for local agent sessions. The CLI, receipt model, protected zones, desktop app, release artifacts, and core Linux enforcement path exist. The `v0.1.0-alpha.11` release is ready for reviewer feedback; future work should make those paths easier to trust before expanding into broader agent-security features.
 
-## Current Alpha Focus
+## Current Reviewer Feedback Focus
 
-- Keep the completed security-review fixes covered by regression tests before expanding feature scope.
-- Keep README, install, release, and security docs aligned with the real implementation.
-- Make receipt and dry-run output impossible to confuse with stronger enforcement than Warder currently provides.
-- Improve protected-zone templates for common secrets and personal data.
+- Keep release docs, reviewer guide, and package smoke tests aligned with `v0.1.0-alpha.11`.
+- Collect reviewer feedback through the GitHub issue templates and turn accepted findings into focused tasks.
+- Keep README, install, release, and security docs aligned with the real implementation before each alpha tag.
+- Keep receipt, dry-run, and GUI output impossible to confuse with stronger enforcement than Warder currently provides.
 - Keep degraded protections obvious before and after launch.
-- Continue validating release artifacts, checksums, and attestations.
+- Continue validating release artifacts, checksums, and local receipt-key behavior.
 
 ## Security Hardening Backlog
 
@@ -24,17 +24,16 @@ These review-driven items are implemented and should remain protected by tests:
 - Use stable user-scoped XDG state paths by default instead of per-working-directory `.warder` paths.
 - Cover symlink/traversal paths, snapshot restore inputs, concurrent DB access, degraded hosts, and journal blind spots with focused tests.
 
-Remaining hardening should focus on receipt key management, desktop IPC/capability review, broader live-journal coverage, and release-readiness checks.
+Remaining hardening should focus on true pre-spawn cgroup placement, broader live-journal coverage on privileged hosts, public-key or external receipt attestation, and optional seccomp/capability-bounded execution.
 
 ## Next Product Improvements
 
-- Richer receipt review for file changes, blocked writes, network observations, dependency-file changes, snapshots, and recovery actions.
-- Safer defaults for common credential paths such as SSH, GPG, cloud credentials, kube config, `.env` files, browser profiles, and wallet files.
-- More guided desktop setup for non-expert users.
-- Better command examples for common local agent tools.
-- Clearer recovery flows around Btrfs snapshots and guarded revert.
-- More host-readiness checks in `warder doctor`.
-- Desktop review flows that preserve the narrow Rust-command IPC boundary.
+- Improve reviewer onboarding from real feedback on the alpha package and demo flow.
+- Add guided host-readiness remediation from `warder doctor` output.
+- Improve snapshot and guarded-revert UX on hosts without Btrfs support.
+- Expand command examples for more local agent tools as reviewers request them.
+- Add clearer reviewer-facing diagnostics for live journal gaps on unprivileged or containerized hosts.
+- Preserve the narrow Rust-command IPC boundary as desktop review flows evolve.
 
 ## Enforcement And Observability
 

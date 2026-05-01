@@ -693,10 +693,11 @@ pub fn decode_ebpf_file_access_record(
         )));
     }
 
-    let pid = u32::from_ne_bytes(record[0..4].try_into().unwrap());
+    let pid = u32::from_ne_bytes(read_record_bytes(record, 0..4, "file-access pid")?);
     let operation = decode_ebpf_file_operation(record[4])?;
     let denied = record[5] != 0;
-    let timestamp_nanos = u64::from_ne_bytes(record[6..14].try_into().unwrap());
+    let timestamp_nanos =
+        u64::from_ne_bytes(read_record_bytes(record, 6..14, "file-access timestamp")?);
     let path = decode_ebpf_file_access_path(&record[14..14 + EBPF_FILE_ACCESS_PATH_BYTES])?;
 
     Ok(EbpfFileAccessEvent {
@@ -736,11 +737,16 @@ pub fn decode_ebpf_network_egress_record(
         )));
     }
 
-    let pid = u32::from_ne_bytes(record[0..4].try_into().unwrap());
+    let pid = u32::from_ne_bytes(read_record_bytes(record, 0..4, "network-egress pid")?);
     let protocol = decode_ebpf_network_protocol(record[4]);
     let denied = record[5] != 0;
-    let destination_port = u16::from_ne_bytes(record[6..8].try_into().unwrap());
-    let timestamp_nanos = u64::from_ne_bytes(record[8..16].try_into().unwrap());
+    let destination_port =
+        u16::from_ne_bytes(read_record_bytes(record, 6..8, "network-egress port")?);
+    let timestamp_nanos = u64::from_ne_bytes(read_record_bytes(
+        record,
+        8..16,
+        "network-egress timestamp",
+    )?);
     let destination =
         decode_ebpf_network_destination(&record[16..16 + EBPF_NETWORK_DESTINATION_BYTES])?;
 
@@ -769,6 +775,26 @@ pub fn decode_ebpf_network_egress_records(
         .chunks_exact(EBPF_NETWORK_EGRESS_RECORD_SIZE)
         .map(decode_ebpf_network_egress_record)
         .collect()
+}
+
+fn read_record_bytes<const N: usize>(
+    record: &[u8],
+    range: std::ops::Range<usize>,
+    field: &str,
+) -> Result<[u8; N], FileJournalWatchError> {
+    let expected_len = N;
+    let Some(bytes) = record.get(range) else {
+        return Err(watch_error(format!(
+            "truncated eBPF record while reading {field}: expected {expected_len} bytes"
+        )));
+    };
+
+    bytes.try_into().map_err(|_| {
+        watch_error(format!(
+            "invalid eBPF record field length for {field}: expected {expected_len} bytes, got {}",
+            bytes.len()
+        ))
+    })
 }
 
 impl<R> EbpfFileJournalCollector<R>

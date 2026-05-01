@@ -12,7 +12,7 @@ The first engineering passes focused on defects that were concrete, local, and t
 - Path canonicalization and traversal handling now have focused tests across config, policy, snapshot, and Landlock planning.
 - The cgroup spawn/tag attribution race is reported in receipts; true pre-spawn placement remains a future launcher/helper.
 
-The next engineering pass should focus on product-completion work: desktop capability review, stronger receipt key management, daemon coordination design, broader live-journal coverage, and final release-readiness checks.
+The product-completion pass is now in alpha review. The next security pass should focus on issues that need deeper design or privileged-host evidence: true pre-spawn cgroup placement, broader live-journal coverage, public-key or external receipt attestation, optional seccomp/capability boundaries, and daemon coordination only if a tested workflow requires it.
 
 ## Accepted Findings
 
@@ -42,7 +42,7 @@ The next engineering pass should focus on product-completion work: desktop capab
 - Full network enforcement.
 - Expanded Landlock read/execute policy.
 - Seccomp and capability-bounded execution.
-- Stronger receipt key management and independent/public-key verification.
+- Independent/public-key receipt verification beyond the current local HMAC workflow.
 - Daemon IPC and active session coordination.
 - Additional snapshot backends.
 - eBPF migration or broader syscall coverage.
