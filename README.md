@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="apps/desktop/src-tauri/icons/icon.png" alt="Warder protected-zone logo" width="120" height="120">
-</p>
-
-<h1 align="center">Warder</h1>
+# Warder
 
 [![CI](https://github.com/bdbetner/warder/actions/workflows/ci.yml/badge.svg)](https://github.com/bdbetner/warder/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/bdbetner/warder?include_prereleases&label=release)](https://github.com/bdbetner/warder/releases)
