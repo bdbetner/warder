@@ -29,7 +29,7 @@ commit="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
 
 {
   printf '# Warder %s\n\n' "$RELEASE_TAG"
-  printf 'Alpha Linux handoff for Warder. This release is intended for Linux package validation and early feedback.\n\n'
+  printf 'Alpha Linux release for Warder. This release is intended for Linux package validation and early feedback.\n\n'
   printf '## Artifacts\n\n'
   printf -- '- `warder`: source-build CLI binary\n'
   printf -- '- `warder-desktop`: source-build native GUI binary\n'

@@ -15,9 +15,11 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
 warder-cli = { path = "../../../crates/cli" }
-warder-config = { path = "../../../crates/config" }
 warder-core = { path = "../../../crates/core" }
 warder-daemon = { path = "../../../crates/daemon" }
 warder-db = { path = "../../../crates/db" }
 warder-gui-support = { path = "../../../crates/gui-support" }
+
+[dev-dependencies]
+warder-config = { path = "../../../crates/config" }
 warder-journal = { path = "../../../crates/journal" }

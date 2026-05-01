@@ -33,5 +33,3 @@ The bundled object provides:
 - fixed-size event payloads using Warder's raw file-access ABI: native-endian `u32 pid`, `u8 operation`, `u8 denied`, `u64 unix_timestamp_nanos`, and a 256-byte NUL-terminated path.
 
 The default tracepoint target is `syscalls:sys_enter_openat`. Override it with `WARDER_EBPF_FILE_OBJECT`, `WARDER_EBPF_FILE_TRACEPOINT_CATEGORY`, and `WARDER_EBPF_FILE_TRACEPOINT_NAME` when testing a different kernel program.
-
-Current workstation note: unprivileged BPF is disabled for the normal user, but the sudo-backed required smoke records a protected-path event via eBPF when run with system Clang and a temporary root Cargo target directory.

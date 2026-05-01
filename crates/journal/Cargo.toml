@@ -8,7 +8,6 @@ license.workspace = true
 aya = { version = "0.13.1", optional = true }
 bytes = { version = "1", optional = true }
 libc = "0.2"
-warder-core = { path = "../core" }
 
 [features]
 live-ebpf = ["dep:aya", "dep:bytes"]
