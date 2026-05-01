@@ -99,6 +99,12 @@ button.primary {
   font-weight: 700;
 }
 
+button.danger {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 @media (prefers-color-scheme: dark) {
   button.primary {
     color: #07130f;
@@ -717,6 +723,90 @@ button.signal {
   gap: 12px;
 }
 
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tabs button {
+  padding: 8px 10px;
+}
+
+.tabs button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.receipt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.receipt-detail,
+.metric {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  padding: 12px;
+}
+
+.receipt-detail.wide {
+  grid-column: 1 / -1;
+}
+
+.receipt-detail h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.receipt-detail dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.receipt-detail dl div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.35fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.receipt-detail dt,
+.metric span {
+  color: var(--muted);
+}
+
+.receipt-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.receipt-detail ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.receipt-detail li span,
+.receipt-detail li code {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.metric {
+  display: grid;
+  gap: 8px;
+}
+
+.metric strong {
+  overflow-wrap: anywhere;
+}
+
 .output {
   max-height: 360px;
   margin: 0;
@@ -778,9 +868,14 @@ button.signal {
   .template-panel,
   .settings-grid,
   .custom-path-form,
+  .receipt-grid,
   .setup-review,
   .stat-grid {
     grid-template-columns: 1fr;
+  }
+
+  .receipt-detail.wide {
+    grid-column: auto;
   }
 
   h1 {

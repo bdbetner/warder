@@ -1,7 +1,8 @@
 use crate::{
     build_cli_run_command, host_readiness, launch_session, list_recent_sessions,
     load_profile_templates_for_context, load_recommended_protections_for_home, render_dry_run_text,
-    render_session_journals_text, render_session_receipt_text, save_gui_config_file, LaunchRequest,
+    render_session_journals_text, render_session_receipt_json_text, render_session_receipt_text,
+    restore_snapshot_for_session, save_gui_config_file, LaunchRequest,
 };
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
@@ -191,6 +192,55 @@ fn missing_session_receipt_returns_readable_error() {
     assert!(error.contains("session"));
 
     let _ = std::fs::remove_file(db_path);
+}
+
+#[test]
+fn session_receipt_json_returns_structured_receipt_for_log_viewer() {
+    let db_path = std::env::temp_dir().join(format!(
+        "warder-desktop-receipt-json-{}.sqlite3",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&db_path);
+    let db = warder_db::WarderDb::open(&db_path).expect("db opened");
+    db.migrate().expect("db migrated");
+    db.create_session(&session_record(
+        "json-session",
+        UNIX_EPOCH + Duration::from_secs(25),
+        SessionStatus::Completed,
+    ))
+    .expect("session");
+
+    let receipt =
+        render_session_receipt_json_text(Some(db_path.clone()), "json-session".to_string())
+            .expect("json receipt");
+
+    assert!(receipt.contains("\"session_id\": \"json-session\""));
+    assert!(receipt.contains("\"status\": \"completed\""));
+    assert!(receipt.contains("\"landlock\": {"));
+    assert!(receipt.contains("\"status\": \"not_requested\""));
+
+    let _ = std::fs::remove_file(db_path);
+}
+
+#[test]
+fn desktop_recovery_commands_reject_unsafe_inputs_before_restore() {
+    let error = restore_snapshot_for_session(
+        PathBuf::from("/tmp/warder.sqlite3"),
+        "../session".to_string(),
+        PathBuf::from("/tmp/snapshots"),
+        "snapshot-id".to_string(),
+    )
+    .unwrap_err();
+    assert!(error.contains("session id contains unsupported characters"));
+
+    let error = restore_snapshot_for_session(
+        PathBuf::from("/tmp/warder.sqlite3"),
+        "session-id".to_string(),
+        PathBuf::from("/tmp/../snapshots"),
+        "snapshot-id".to_string(),
+    )
+    .unwrap_err();
+    assert!(error.contains("snapshot root must not contain traversal"));
 }
 
 #[test]

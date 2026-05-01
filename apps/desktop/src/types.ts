@@ -107,6 +107,59 @@ export interface RecentSessionSummary {
   degraded_reasons: number;
 }
 
+export interface ReceiptStatus {
+  status: string;
+  message: string | null;
+  path: string | null;
+  backend: string | null;
+  snapshot_id: string | null;
+}
+
+export interface ReceiptAction {
+  kind: string;
+  label: string;
+  command: string;
+  command_argv: string[];
+  mutates: boolean;
+  reason?: string;
+}
+
+export interface StructuredReceipt {
+  session_id: string;
+  status: string;
+  exit_code: number | null;
+  command: string[];
+  protected_zones: string[];
+  enforcement: {
+    cgroup: ReceiptStatus;
+    landlock: ReceiptStatus;
+    snapshot: ReceiptStatus;
+  };
+  file_activity: {
+    total_events: number;
+    zones: Record<string, number>;
+    sources: Record<string, number>;
+    attribution: Record<string, number>;
+  };
+  network_activity: {
+    total_events: number;
+    destinations: Record<string, number>;
+    protocols: Record<string, number>;
+    sources: Record<string, number>;
+    attribution: Record<string, number>;
+  };
+  readiness: {
+    level: string;
+    blocked_reasons: string[];
+    degraded_reasons: string[];
+  };
+  degraded_coverage: {
+    total_reasons: number;
+  };
+  degraded_reasons: string[];
+  recovery_actions: ReceiptAction[];
+}
+
 export interface HostReadinessSummary {
   level: "strong" | "degraded" | "blocked";
   summary: string;

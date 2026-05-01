@@ -5,7 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use warder_cli::{
     assess_host_readiness, environment_support_from_probe, known_agent_profile_catalog,
     launch_supervised_run, render_all_journals_from_db, render_dry_run_from_config,
-    render_host_readiness, render_session_receipt_from_db, CliCommand, ReadinessLevel,
+    render_host_readiness, render_revert_preview, render_session_receipt_from_db,
+    render_session_receipt_from_db_with_format, restore_snapshot_from_root_for_session, CliCommand,
+    ReadinessLevel, ReceiptFormat,
 };
 use warder_core::{SessionRecord, SessionStatus};
 use warder_gui_support::config::{render_gui_config_toml, GuiConfigDraft};
@@ -203,6 +205,16 @@ pub fn render_session_receipt_text(
     render_session_receipt_from_db(db_path, &session_id).map_err(|error| error.message)
 }
 
+pub fn render_session_receipt_json_text(
+    db_path: Option<PathBuf>,
+    session_id: String,
+) -> Result<String, String> {
+    validate_optional_desktop_path(db_path.as_ref(), "database path")?;
+    validate_desktop_session_id(&session_id)?;
+    render_session_receipt_from_db_with_format(db_path, &session_id, ReceiptFormat::Json)
+        .map_err(|error| error.message)
+}
+
 pub fn render_session_journals_text(
     db_path: Option<PathBuf>,
     session_id: String,
@@ -210,6 +222,29 @@ pub fn render_session_journals_text(
     validate_optional_desktop_path(db_path.as_ref(), "database path")?;
     validate_desktop_session_id(&session_id)?;
     render_all_journals_from_db(db_path, Some(&session_id)).map_err(|error| error.message)
+}
+
+pub fn render_snapshot_revert_preview(
+    snapshot_root: PathBuf,
+    snapshot_id: String,
+) -> Result<String, String> {
+    validate_desktop_path(&snapshot_root, "snapshot root")?;
+    validate_desktop_token(&snapshot_id, "snapshot id")?;
+    render_revert_preview(snapshot_root, &snapshot_id).map_err(|error| error.message)
+}
+
+pub fn restore_snapshot_for_session(
+    db_path: PathBuf,
+    session_id: String,
+    snapshot_root: PathBuf,
+    snapshot_id: String,
+) -> Result<String, String> {
+    validate_desktop_path(&db_path, "database path")?;
+    validate_desktop_path(&snapshot_root, "snapshot root")?;
+    validate_desktop_session_id(&session_id)?;
+    validate_desktop_token(&snapshot_id, "snapshot id")?;
+    restore_snapshot_from_root_for_session(db_path, &session_id, snapshot_root, &snapshot_id)
+        .map_err(|error| error.message)
 }
 
 pub fn list_recent_sessions(
@@ -443,8 +478,28 @@ fn session_receipt_text(db_path: Option<PathBuf>, session_id: String) -> Result<
 }
 
 #[tauri::command]
+fn session_receipt_json(db_path: Option<PathBuf>, session_id: String) -> Result<String, String> {
+    render_session_receipt_json_text(db_path, session_id)
+}
+
+#[tauri::command]
 fn session_journals_text(db_path: Option<PathBuf>, session_id: String) -> Result<String, String> {
     render_session_journals_text(db_path, session_id)
+}
+
+#[tauri::command]
+fn snapshot_revert_preview(snapshot_root: PathBuf, snapshot_id: String) -> Result<String, String> {
+    render_snapshot_revert_preview(snapshot_root, snapshot_id)
+}
+
+#[tauri::command]
+fn snapshot_revert_session(
+    db_path: PathBuf,
+    session_id: String,
+    snapshot_root: PathBuf,
+    snapshot_id: String,
+) -> Result<String, String> {
+    restore_snapshot_for_session(db_path, session_id, snapshot_root, snapshot_id)
 }
 
 #[tauri::command]
@@ -489,7 +544,10 @@ pub fn run() {
             save_gui_config,
             dry_run_text,
             session_receipt_text,
+            session_receipt_json,
             session_journals_text,
+            snapshot_revert_preview,
+            snapshot_revert_session,
             recent_sessions,
             host_readiness_summary,
             desktop_default_paths,

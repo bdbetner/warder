@@ -97,6 +97,27 @@ function installInvokeMock() {
         return Promise.resolve(recentSessions);
       case "session_receipt_text":
         return Promise.resolve("session: session-smoke\nstatus: completed");
+      case "session_receipt_json":
+        return Promise.resolve(
+          JSON.stringify({
+            session_id: "session-smoke",
+            status: "completed",
+            exit_code: 0,
+            command: ["true"],
+            protected_zones: ["protected"],
+            enforcement: {
+              cgroup: { status: "degraded", message: null, path: null, backend: null, snapshot_id: null },
+              landlock: { status: "degraded", message: null, path: null, backend: null, snapshot_id: null },
+              snapshot: { status: "not_requested", message: null, path: null, backend: null, snapshot_id: null },
+            },
+            file_activity: { total_events: 2, zones: { protected: 2 }, sources: { inotify: 2 }, attribution: {} },
+            network_activity: { total_events: 0, destinations: {}, protocols: {}, sources: {}, attribution: {} },
+            readiness: { level: "degraded", blocked_reasons: [], degraded_reasons: ["Landlock unavailable"] },
+            degraded_coverage: { total_reasons: 1 },
+            degraded_reasons: ["Landlock unavailable"],
+            recovery_actions: [],
+          }),
+        );
       case "session_journals_text":
         return Promise.resolve("file journal: 2 event(s)");
       default:
@@ -152,6 +173,7 @@ describe("Warder desktop smoke flow", () => {
     const logs = within(logViewer as HTMLElement);
 
     await user.click(await logs.findByRole("button", { name: /session-smoke/ }));
+    await user.click(await logs.findByRole("button", { name: "Raw Receipt" }));
     expect(await logs.findByText(/status: completed/)).toBeInTheDocument();
 
     await user.click(logs.getByRole("button", { name: "Load journals" }));
