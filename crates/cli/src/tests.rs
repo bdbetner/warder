@@ -5214,26 +5214,28 @@ fn quickstart_demo_config_allows_no_cgroup_root_launch_with_degraded_tagging() {
 fn render_daemon_status_from_runtime_reads_runtime_file() {
     let runtime_path = temp_file("warder-cli-daemon-runtime", "state");
     let store = warder_daemon::DaemonRuntimeFile::new(&runtime_path);
+    let pid = std::process::id();
     store
         .write_status(&warder_daemon::DaemonRuntimeReport {
             status: warder_daemon::DaemonRuntimeStatus::Running,
-            pid: Some(4242),
+            pid: Some(pid),
             socket_path: Some(PathBuf::from("/run/user/1000/warder.sock")),
-            message: "daemon running with pid 4242".to_string(),
+            message: format!("daemon running with pid {pid}"),
         })
         .unwrap();
 
     let status = render_daemon_status_from_runtime(Some(runtime_path)).unwrap();
 
     assert!(status.contains("daemon: running"));
-    assert!(status.contains("pid: 4242"));
+    assert!(status.contains(&format!("pid: {pid}")));
 }
 
 #[test]
 fn start_daemon_runtime_with_launcher_writes_verified_runtime_state() {
     let runtime_path = temp_file("warder-cli-daemon-start-launcher-runtime", "state");
+    let pid = std::process::id();
     let launcher = FakeDaemonLauncher {
-        pid: 4242,
+        pid,
         alive: true,
         runtime_path: Some(runtime_path.clone()),
     };
@@ -5241,11 +5243,11 @@ fn start_daemon_runtime_with_launcher_writes_verified_runtime_state() {
     let status = start_daemon_runtime_with_launcher(Some(runtime_path.clone()), &launcher).unwrap();
 
     assert!(status.contains("daemon: running"));
-    assert!(status.contains("pid: 4242"));
+    assert!(status.contains(&format!("pid: {pid}")));
     let loaded = warder_daemon::DaemonRuntimeFile::new(runtime_path)
         .read_status()
         .unwrap();
-    assert_eq!(loaded.pid, Some(4242));
+    assert_eq!(loaded.pid, Some(pid));
 }
 
 #[test]
@@ -5421,12 +5423,13 @@ fn stop_daemon_runtime_clears_stale_runtime_file() {
 #[test]
 fn stop_daemon_runtime_with_terminator_terminates_recorded_pid_before_clear() {
     let runtime_path = temp_file("warder-cli-daemon-stop-terminator-runtime", "state");
+    let pid = std::process::id();
     warder_daemon::DaemonRuntimeFile::new(&runtime_path)
         .write_status(&warder_daemon::DaemonRuntimeReport {
             status: warder_daemon::DaemonRuntimeStatus::Running,
-            pid: Some(4242),
+            pid: Some(pid),
             socket_path: Some(PathBuf::from("/tmp/warder.sock")),
-            message: "daemon running with pid 4242".to_string(),
+            message: format!("daemon running with pid {pid}"),
         })
         .unwrap();
     let terminator = RecordingTerminator::default();
@@ -5434,8 +5437,8 @@ fn stop_daemon_runtime_with_terminator_terminates_recorded_pid_before_clear() {
     let stopped =
         stop_daemon_runtime_with_terminator(Some(runtime_path.clone()), &terminator).unwrap();
 
-    assert_eq!(terminator.terminated_pids(), vec![4242]);
-    assert!(stopped.contains("daemon pid 4242 terminated"));
+    assert_eq!(terminator.terminated_pids(), vec![pid]);
+    assert!(stopped.contains(&format!("daemon pid {pid} terminated")));
     assert!(!runtime_path.exists());
 }
 
@@ -5496,14 +5499,15 @@ fn internal_daemon_run_writes_own_runtime_state() {
         config_path: None,
     };
 
-    let report = write_internal_daemon_runtime_state(&options, 4242).unwrap();
+    let pid = std::process::id();
+    let report = write_internal_daemon_runtime_state(&options, pid).unwrap();
 
-    assert_eq!(report.pid, Some(4242));
+    assert_eq!(report.pid, Some(pid));
     let loaded = warder_daemon::DaemonRuntimeFile::new(runtime_path)
         .read_status()
         .unwrap();
     assert_eq!(loaded.status, warder_daemon::DaemonRuntimeStatus::Running);
-    assert_eq!(loaded.pid, Some(4242));
+    assert_eq!(loaded.pid, Some(pid));
     assert_eq!(loaded.socket_path, Some(PathBuf::from("/tmp/warder.sock")));
 }
 
@@ -5518,7 +5522,8 @@ fn internal_daemon_run_starts_coordinator_with_runtime_identity() {
         config_path: Some(config_path),
     };
 
-    let mut coordinator = start_internal_daemon_coordinator(&options, 4242).unwrap();
+    let pid = std::process::id();
+    let mut coordinator = start_internal_daemon_coordinator(&options, pid).unwrap();
     let tick = coordinator.tick(warder_daemon::CapabilityProbe {
         landlock: warder_daemon::CapabilityState::Available,
         cgroups: warder_daemon::CapabilityState::Available,
@@ -5531,7 +5536,7 @@ fn internal_daemon_run_starts_coordinator_with_runtime_identity() {
     let loaded = warder_daemon::DaemonRuntimeFile::new(runtime_path)
         .read_status()
         .unwrap();
-    assert_eq!(loaded.pid, Some(4242));
+    assert_eq!(loaded.pid, Some(pid));
     assert!(loaded.message.contains("1 protected zone"));
 }
 

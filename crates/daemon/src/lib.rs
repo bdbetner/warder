@@ -253,7 +253,22 @@ impl DaemonRuntimeFile {
             }
         };
 
-        parse_runtime_file(&contents)
+        let report = parse_runtime_file(&contents)?;
+        if matches!(report.status, DaemonRuntimeStatus::Running)
+            && report
+                .pid
+                .map(|pid| !process_is_alive(pid))
+                .unwrap_or(false)
+        {
+            let _ = self.clear();
+            return Ok(DaemonRuntimeReport {
+                status: DaemonRuntimeStatus::Stopped,
+                pid: None,
+                socket_path: None,
+                message: "daemon is not running; removed stale runtime file".to_string(),
+            });
+        }
+        Ok(report)
     }
 
     pub fn write_status(&self, report: &DaemonRuntimeReport) -> Result<(), DaemonRuntimeFileError> {
@@ -269,7 +284,21 @@ impl DaemonRuntimeFile {
                 ))
             })?;
         }
-        std::fs::write(&self.path, render_runtime_file(report)).map_err(|error| {
+        let temp_path = self.path.with_extension(format!(
+            "{}.tmp-{}",
+            self.path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .unwrap_or("state"),
+            std::process::id()
+        ));
+        std::fs::write(&temp_path, render_runtime_file(report)).map_err(|error| {
+            runtime_file_error(format!(
+                "failed to write daemon runtime file '{}': {error}",
+                temp_path.display()
+            ))
+        })?;
+        std::fs::rename(&temp_path, &self.path).map_err(|error| {
             runtime_file_error(format!(
                 "failed to write daemon runtime file '{}': {error}",
                 self.path.display()
@@ -491,6 +520,16 @@ fn parse_runtime_file(contents: &str) -> Result<DaemonRuntimeReport, DaemonRunti
         socket_path,
         message: message.unwrap_or_else(|| "daemon is not running".to_string()),
     })
+}
+
+#[cfg(target_os = "linux")]
+fn process_is_alive(pid: u32) -> bool {
+    PathBuf::from(format!("/proc/{pid}")).exists()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn process_is_alive(_pid: u32) -> bool {
+    true
 }
 
 fn runtime_file_error(message: impl Into<String>) -> DaemonRuntimeFileError {
@@ -748,22 +787,66 @@ mod tests {
     fn daemon_runtime_file_round_trips_running_state() {
         let path = temp_dir("runtime-file").join("daemon.state");
         let store = DaemonRuntimeFile::new(&path);
+        let pid = std::process::id();
         let report = DaemonRuntimeReport {
             status: DaemonRuntimeStatus::Running,
-            pid: Some(4242),
+            pid: Some(pid),
             socket_path: Some(PathBuf::from("/run/user/1000/warder.sock")),
-            message: "daemon running with pid 4242".to_string(),
+            message: format!("daemon running with pid {pid}"),
         };
 
         store.write_status(&report).unwrap();
         let loaded = store.read_status().unwrap();
 
         assert_eq!(loaded.status, DaemonRuntimeStatus::Running);
-        assert_eq!(loaded.pid, Some(4242));
+        assert_eq!(loaded.pid, Some(pid));
         assert_eq!(
             loaded.socket_path,
             Some(PathBuf::from("/run/user/1000/warder.sock"))
         );
+    }
+
+    #[test]
+    fn daemon_runtime_file_write_is_atomic_and_cleans_temp_file() {
+        let dir = temp_dir("runtime-file-atomic");
+        let path = dir.join("daemon.state");
+        let store = DaemonRuntimeFile::new(&path);
+        let report = DaemonRuntimeReport {
+            status: DaemonRuntimeStatus::Stopped,
+            pid: None,
+            socket_path: None,
+            message: "daemon is not running".to_string(),
+        };
+
+        store.write_status(&report).unwrap();
+
+        assert!(path.exists());
+        let temp_files = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains(".tmp-"))
+            .count();
+        assert_eq!(temp_files, 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn daemon_runtime_file_clears_stale_running_pid() {
+        let path = temp_dir("runtime-file-stale-pid").join("daemon.state");
+        let store = DaemonRuntimeFile::new(&path);
+        let report = DaemonRuntimeReport {
+            status: DaemonRuntimeStatus::Running,
+            pid: Some(u32::MAX),
+            socket_path: Some(PathBuf::from("/run/user/1000/warder.sock")),
+            message: "daemon running with pid 4294967295".to_string(),
+        };
+        store.write_status(&report).unwrap();
+
+        let loaded = store.read_status().unwrap();
+
+        assert_eq!(loaded.status, DaemonRuntimeStatus::Stopped);
+        assert!(loaded.message.contains("stale runtime file"));
+        assert!(!path.exists());
     }
 
     #[test]
