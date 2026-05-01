@@ -40,6 +40,22 @@ jobs:
           fi
           git rev-parse "$RELEASE_TAG^{commit}" >/dev/null
 
+      - name: Require passing CI for release commit
+        run: |
+          release_commit="$(git rev-parse "$RELEASE_TAG^{commit}")"
+          successful_runs="$(
+            gh run list \
+              --workflow CI \
+              --commit "$release_commit" \
+              --status success \
+              --json databaseId \
+              --jq length
+          )"
+          if [[ "$successful_runs" -lt 1 ]]; then
+            echo "release tag $RELEASE_TAG points at $release_commit, but no successful CI run exists for that commit" >&2
+            exit 1
+          fi
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
