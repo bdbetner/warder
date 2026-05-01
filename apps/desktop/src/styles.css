@@ -237,6 +237,22 @@ button:disabled {
   margin: 20px 0 14px;
 }
 
+.settings-grid,
+.custom-path-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+  margin: 14px 0;
+}
+
+.toggle-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 12px 0 16px;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -436,6 +452,25 @@ h3 {
   accent-color: var(--accent);
 }
 
+.inline-input {
+  display: block;
+  width: min(100%, 680px);
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.inline-input + .inline-input {
+  margin-top: 6px;
+}
+
+.strong-input {
+  font-weight: 800;
+}
+
 .path-row small {
   display: block;
   color: var(--muted);
@@ -486,6 +521,10 @@ h3 {
   font-size: 0.82rem;
   line-height: 1.2;
   background: var(--surface);
+}
+
+button.signal {
+  cursor: pointer;
 }
 
 .muted-badge,
@@ -737,6 +776,8 @@ h3 {
   }
 
   .template-panel,
+  .settings-grid,
+  .custom-path-form,
   .setup-review,
   .stat-grid {
     grid-template-columns: 1fr;

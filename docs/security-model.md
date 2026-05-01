@@ -36,6 +36,8 @@ Session ids are random local receipt identifiers, not secrets or authentication 
 
 Landlock is the preferred mechanism for preventing writes to protected paths. Path checks canonicalize where possible and reject traversal or unsafe overlaps in config, policy, snapshot, and enforcement planning paths. Missing paths and symlinks are handled deliberately so receipts can describe what was actually enforced or degraded.
 
+Best-effort launches may continue with degraded write protection when the host cannot apply Landlock. Strict launches with `warder run --require-enforcement` refuse to start when any required protected write blocking is not active.
+
 Snapshot ids are validated before restore path construction. Restore planning must continue to reject path separators, traversal, absolute paths, and empty ids before joining anything below a snapshot root.
 
 ## Observation

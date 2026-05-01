@@ -67,6 +67,12 @@ function installInvokeMock() {
         return Promise.resolve(recommendedProtections);
       case "load_profile_template_catalog":
         return Promise.resolve(profileTemplates);
+      case "desktop_default_paths":
+        return Promise.resolve({
+          project_root: "/home/alex/project",
+          config_path: "/home/alex/project/.warder/gui.toml",
+          db_path: "/home/alex/project/.warder/warder.sqlite3",
+        });
       case "save_gui_config":
         return Promise.resolve(undefined);
       case "host_readiness_summary":
@@ -115,7 +121,7 @@ describe("Warder desktop smoke flow", () => {
     render(<App />);
 
     await screen.findByRole("heading", { name: "Choose an agent profile" });
-    expect(screen.getByText("/home/alex/.ssh")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("/home/alex/.ssh")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Save setup" }));
 
@@ -160,6 +166,9 @@ describe("Warder desktop smoke flow", () => {
         selectedProfileId: "codex-cli",
         agentCommand: "codex",
         networkJournal: true,
+        requireEnforcement: false,
+        configPath: "/home/alex/project/.warder/gui.toml",
+        dbPath: "/home/alex/project/.warder/warder.sqlite3",
         protectedPaths: [
           {
             ...recommendedProtections[0],

@@ -24,6 +24,9 @@ export interface AppPolicyState {
   selectedProfileId: string;
   agentCommand: string;
   networkJournal: boolean;
+  requireEnforcement: boolean;
+  configPath: string;
+  dbPath: string;
   protectedPaths: ProtectedPathSelection[];
 }
 
@@ -78,6 +81,13 @@ export interface LaunchRequest {
   db_path: string;
   agent_id: string;
   command: string[];
+  require_enforcement: boolean;
+}
+
+export interface DesktopPaths {
+  project_root: string;
+  config_path: string;
+  db_path: string;
 }
 
 export interface LaunchSessionResult {

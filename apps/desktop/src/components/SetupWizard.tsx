@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ProfileTemplateCatalogEntry, ProtectedPathSelection } from "../types";
 
 interface SetupWizardProps {
@@ -5,9 +6,22 @@ interface SetupWizardProps {
   profileTemplates: ProfileTemplateCatalogEntry[];
   selectedProfileId: string;
   networkJournal: boolean;
+  configPath: string;
+  dbPath: string;
+  agentCommand: string;
+  requireEnforcement: boolean;
   onTogglePath: (id: string) => void;
   onToggleRead: (id: string) => void;
+  onToggleSnapshot: (id: string) => void;
+  onUpdatePath: (id: string, patch: Partial<ProtectedPathSelection>) => void;
+  onAddCustomPath: (path: string, label: string) => void;
+  onRemovePath: (id: string) => void;
   onApplyProfileTemplate: (profileId: string) => void;
+  onNetworkJournalChange: (enabled: boolean) => void;
+  onConfigPathChange: (path: string) => void;
+  onDbPathChange: (path: string) => void;
+  onAgentCommandChange: (command: string) => void;
+  onRequireEnforcementChange: (enabled: boolean) => void;
   onComplete: () => Promise<void>;
 }
 
@@ -16,11 +30,26 @@ export function SetupWizard({
   profileTemplates,
   selectedProfileId,
   networkJournal,
+  configPath,
+  dbPath,
+  agentCommand,
+  requireEnforcement,
   onTogglePath,
   onToggleRead,
+  onToggleSnapshot,
+  onUpdatePath,
+  onAddCustomPath,
+  onRemovePath,
   onApplyProfileTemplate,
+  onNetworkJournalChange,
+  onConfigPathChange,
+  onDbPathChange,
+  onAgentCommandChange,
+  onRequireEnforcementChange,
   onComplete,
 }: SetupWizardProps) {
+  const [customPath, setCustomPath] = useState("");
+  const [customLabel, setCustomLabel] = useState("");
   const selectedTemplate = profileTemplates.find(
     (template) => template.id === selectedProfileId,
   );
@@ -66,6 +95,47 @@ export function SetupWizard({
             Reapply template
           </button>
         </div>
+        <div className="settings-grid">
+          <label className="field compact-field">
+            Agent command
+            <input
+              value={agentCommand}
+              onChange={(event) => onAgentCommandChange(event.target.value)}
+            />
+          </label>
+          <label className="field compact-field">
+            Config path
+            <input
+              value={configPath}
+              onChange={(event) => onConfigPathChange(event.target.value)}
+            />
+          </label>
+          <label className="field compact-field">
+            Database path
+            <input
+              value={dbPath}
+              onChange={(event) => onDbPathChange(event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="toggle-row">
+          <label className="inline-check">
+            <input
+              type="checkbox"
+              checked={networkJournal}
+              onChange={(event) => onNetworkJournalChange(event.target.checked)}
+            />
+            Network journal
+          </label>
+          <label className="inline-check">
+            <input
+              type="checkbox"
+              checked={requireEnforcement}
+              onChange={(event) => onRequireEnforcementChange(event.target.checked)}
+            />
+            Strict write-block launch
+          </label>
+        </div>
         {selectedTemplate ? (
           <div className="template-summary">
             <div>
@@ -100,10 +170,37 @@ export function SetupWizard({
         </div>
         <h2>Protected paths</h2>
         <p className="notice">
-          Write protection is the v1 enforced control. Read selections are kept
-          visible in the generated policy description until Warder grows a
-          dedicated read-deny policy field.
+          Write protection is the v1 enforced control. Read selections are
+          visible policy notes only; Warder does not block reads in v1.
         </p>
+        <div className="custom-path-form">
+          <label className="field compact-field">
+            Custom path
+            <input
+              value={customPath}
+              placeholder="/absolute/path"
+              onChange={(event) => setCustomPath(event.target.value)}
+            />
+          </label>
+          <label className="field compact-field">
+            Label
+            <input
+              value={customLabel}
+              placeholder="Project secrets"
+              onChange={(event) => setCustomLabel(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              onAddCustomPath(customPath, customLabel);
+              setCustomPath("");
+              setCustomLabel("");
+            }}
+          >
+            Add path
+          </button>
+        </div>
         <div className="path-list">
           {paths.map((path) => (
             <article className={`path-row setup-path ${path.selected ? "selected" : ""}`} key={path.id}>
@@ -116,8 +213,23 @@ export function SetupWizard({
                     onChange={() => onTogglePath(path.id)}
                   />
                   <span>
-                    <strong>{path.label}</strong>
-                    <small>{path.path}</small>
+                    <input
+                      className="inline-input strong-input"
+                      value={path.label}
+                      onChange={(event) =>
+                        onUpdatePath(path.id, { label: event.target.value })
+                      }
+                    />
+                    <input
+                      className="inline-input"
+                      value={path.path}
+                      onChange={(event) =>
+                        onUpdatePath(path.id, {
+                          path: event.target.value,
+                          exists: true,
+                        })
+                      }
+                    />
                   </span>
                 </label>
                 <div className="protection-matrix">
@@ -136,11 +248,16 @@ export function SetupWizard({
                   <span className={path.writeProtected ? "signal on" : "signal muted"}>
                     Write
                   </span>
-                  <span
+                  <button
+                    type="button"
                     className={path.snapshotProtected ? "signal on" : "signal muted"}
+                    onClick={() => onToggleSnapshot(path.id)}
                   >
                     Snapshot
-                  </span>
+                  </button>
+                  <button type="button" onClick={() => onRemovePath(path.id)}>
+                    Remove
+                  </button>
                 </div>
               </div>
               <p>{path.reason}</p>

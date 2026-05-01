@@ -50,6 +50,7 @@ fn build_cli_run_command_includes_launch_and_db() {
         PathBuf::from("/tmp/warder/warder.sqlite3"),
         "codex".to_string(),
         vec!["codex".to_string(), "--yolo".to_string()],
+        true,
     );
 
     assert_eq!(
@@ -62,6 +63,7 @@ fn build_cli_run_command_includes_launch_and_db() {
             "/tmp/warder/config.toml",
             "--db",
             "/tmp/warder/warder.sqlite3",
+            "--require-enforcement",
             "--agent",
             "codex",
             "--",
@@ -360,6 +362,7 @@ fn launch_session_runs_supervised_command_and_returns_receipt() {
         config_path,
         db_path,
         agent_id: "local-agent".to_string(),
+        require_enforcement: false,
         command: vec![
             "sh".to_string(),
             "-c".to_string(),

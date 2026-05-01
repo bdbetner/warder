@@ -22,6 +22,7 @@ pub struct LaunchRequest {
     pub db_path: PathBuf,
     pub agent_id: String,
     pub command: Vec<String>,
+    pub require_enforcement: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +50,13 @@ pub struct HostReadinessSummary {
     pub summary: String,
     pub blocked_reasons: Vec<String>,
     pub degraded_reasons: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DesktopPaths {
+    pub project_root: PathBuf,
+    pub config_path: PathBuf,
+    pub db_path: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +101,16 @@ pub fn load_profile_templates() -> Result<Vec<ProfileTemplateCatalogEntry>, Stri
     let cwd =
         std::env::current_dir().map_err(|error| format!("failed to read current dir: {error}"))?;
     load_profile_templates_for_context(PathBuf::from(home), cwd)
+}
+
+pub fn default_desktop_paths() -> Result<DesktopPaths, String> {
+    let project_root =
+        std::env::current_dir().map_err(|error| format!("failed to read current dir: {error}"))?;
+    Ok(DesktopPaths {
+        config_path: project_root.join(".warder/gui.toml"),
+        db_path: project_root.join(".warder/warder.sqlite3"),
+        project_root,
+    })
 }
 
 pub fn load_profile_templates_for_context(
@@ -235,6 +253,7 @@ pub fn build_launch_command_args(request: LaunchRequest) -> Result<Vec<String>, 
         request.db_path,
         request.agent_id,
         request.command,
+        request.require_enforcement,
     ))
 }
 
@@ -247,6 +266,7 @@ pub fn launch_session(request: LaunchRequest) -> Result<LaunchSessionResult, Str
         cgroup_root: None,
         snapshot_root: None,
         launch: true,
+        require_enforcement: request.require_enforcement,
         agent: request.agent_id,
         command: request.command,
     };
@@ -334,6 +354,7 @@ pub fn build_cli_run_command(
     db_path: PathBuf,
     agent_id: String,
     command: Vec<String>,
+    require_enforcement: bool,
 ) -> Vec<String> {
     let mut args = vec![
         "warder".to_string(),
@@ -343,10 +364,11 @@ pub fn build_cli_run_command(
         config_path.display().to_string(),
         "--db".to_string(),
         db_path.display().to_string(),
-        "--agent".to_string(),
-        agent_id,
-        "--".to_string(),
     ];
+    if require_enforcement {
+        args.push("--require-enforcement".to_string());
+    }
+    args.extend(["--agent".to_string(), agent_id, "--".to_string()]);
     args.extend(command);
     args
 }
@@ -439,6 +461,11 @@ fn host_readiness_summary() -> Result<HostReadinessSummary, String> {
 }
 
 #[tauri::command]
+fn desktop_default_paths() -> Result<DesktopPaths, String> {
+    default_desktop_paths()
+}
+
+#[tauri::command]
 fn build_launch_command(request: LaunchRequest) -> Result<Vec<String>, String> {
     build_launch_command_args(request)
 }
@@ -465,6 +492,7 @@ pub fn run() {
             session_journals_text,
             recent_sessions,
             host_readiness_summary,
+            desktop_default_paths,
             build_launch_command,
             launch_session_command
         ])

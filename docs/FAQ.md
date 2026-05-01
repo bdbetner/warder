@@ -12,6 +12,8 @@ No. Warder only supervises commands launched through `warder run`.
 
 Warder reports degraded or blocked enforcement depending on policy. It should not claim write denial when the host cannot provide it.
 
+Use `warder run --require-enforcement` when a session must not launch unless protected write blocking can be applied.
+
 ## Can Warder stop network access?
 
 Not in the current alpha. Warder can record network observations where configured and supported, but network journaling is visibility, not complete network enforcement.

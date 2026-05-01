@@ -6,6 +6,7 @@ FLOW_ROOT="${WARDER_CLI_FLOW_ROOT:-/tmp/warder-cli-flow}"
 DB_PATH="$FLOW_ROOT/warder.sqlite3"
 PROTECTED_ROOT="$FLOW_ROOT/protected path"
 CONFIG_PATH="$FLOW_ROOT/generated.toml"
+STRICT_CONFIG_PATH="$FLOW_ROOT/strict-disabled.toml"
 
 if [[ -n "${WARDER_BIN:-}" ]]; then
   WARDER_CMD=("$WARDER_BIN")
@@ -57,6 +58,34 @@ if ! grep -q "launch: no command was run" <<<"$dry_run_output"; then
 fi
 if [[ -e "$PROTECTED_ROOT/hello.txt" ]]; then
   echo "dry-run unexpectedly wrote into the protected path" >&2
+  exit 1
+fi
+
+sed 's/landlock = "best-effort"/landlock = "disabled"/' "$CONFIG_PATH" > "$STRICT_CONFIG_PATH"
+
+set +e
+strict_output="$(
+  run_warder run \
+    --config "$STRICT_CONFIG_PATH" \
+    --db "$DB_PATH.strict" \
+    --launch \
+    --require-enforcement \
+    --agent local-script \
+    -- sh -c "printf strict > '$PROTECTED_ROOT/strict.txt'" 2>&1
+)"
+strict_status=$?
+set -e
+printf '%s\n' "$strict_output"
+if [[ $strict_status -eq 0 ]]; then
+  echo "expected strict write-block launch to fail when Landlock is disabled" >&2
+  exit 1
+fi
+if ! grep -q -- "--require-enforcement refused" <<<"$strict_output"; then
+  echo "expected strict write-block launch to explain enforcement refusal" >&2
+  exit 1
+fi
+if [[ -e "$PROTECTED_ROOT/strict.txt" ]]; then
+  echo "strict write-block refusal unexpectedly launched the command" >&2
   exit 1
 fi
 

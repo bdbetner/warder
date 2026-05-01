@@ -2,24 +2,84 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import type { LaunchRequest, LaunchSessionResult } from "../types";
 
-const CONFIG_PATH = ".warder/gui.toml";
-const DB_PATH = ".warder/warder.sqlite3";
 const COMMAND_STATE_KEY = "warder.desktop.launchCommand.v1";
 
 function splitCommand(input: string): string[] {
-  return input.split(" ").map((part) => part.trim()).filter(Boolean);
+  const args: string[] = [];
+  let current = "";
+  let quote: '"' | "'" | null = null;
+  let escaped = false;
+
+  for (const char of input) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        args.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (escaped) {
+    current += "\\";
+  }
+  if (quote) {
+    throw new Error(`unterminated ${quote} quote in command`);
+  }
+  if (current) {
+    args.push(current);
+  }
+  return args;
 }
 
-function launchRequest(commandText: string): LaunchRequest {
+function launchRequest(
+  commandText: string,
+  configPath: string,
+  dbPath: string,
+  requireEnforcement: boolean,
+): LaunchRequest {
   return {
-    config_path: CONFIG_PATH,
-    db_path: DB_PATH,
+    config_path: configPath,
+    db_path: dbPath,
     agent_id: "local-agent",
     command: splitCommand(commandText),
+    require_enforcement: requireEnforcement,
   };
 }
 
-export function SessionLauncher() {
+interface SessionLauncherProps {
+  configPath: string;
+  dbPath: string;
+  requireEnforcement: boolean;
+}
+
+export function SessionLauncher({
+  configPath,
+  dbPath,
+  requireEnforcement,
+}: SessionLauncherProps) {
   const [command, setCommand] = useState(
     () => window.localStorage.getItem(COMMAND_STATE_KEY) ?? "true",
   );
@@ -38,11 +98,11 @@ export function SessionLauncher() {
   async function runDryRun() {
     setError(null);
     setLaunchResult(null);
-    const request = launchRequest(command);
     try {
+      const request = launchRequest(command, configPath, dbPath, requireEnforcement);
       const [output, cli] = await Promise.all([
         invoke<string>("dry_run_text", {
-          configPath: CONFIG_PATH,
+          configPath,
           agentId: request.agent_id,
           command: request.command,
         }),
@@ -58,8 +118,8 @@ export function SessionLauncher() {
   async function runProtectedSession() {
     setError(null);
     setRunning(true);
-    const request = launchRequest(command);
     try {
+      const request = launchRequest(command, configPath, dbPath, requireEnforcement);
       const result = await invoke<LaunchSessionResult>("launch_session_command", {
         request,
       });
@@ -80,6 +140,12 @@ export function SessionLauncher() {
         Commands run through Warder using the saved setup policy. Review dry-run
         warnings before starting a protected session.
       </p>
+      {requireEnforcement && (
+        <p className="notice">
+          Strict write-block launch is enabled. Warder will refuse to start if
+          protected writes cannot be blocked.
+        </p>
+      )}
       <label className="field">
         Command
         <input

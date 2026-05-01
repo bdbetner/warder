@@ -66,6 +66,7 @@ pub enum CliCommand {
         cgroup_root: Option<PathBuf>,
         snapshot_root: Option<PathBuf>,
         launch: bool,
+        require_enforcement: bool,
         agent: String,
         command: Vec<String>,
     },
@@ -2024,7 +2025,7 @@ impl DaemonTerminator for CommandDaemonTerminator {
 
 pub fn usage() -> &'static str {
     "usage: warder <command>\n\
-primary: warder run --config <path> --launch --agent <id> [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
+primary: warder run --config <path> --launch --agent <id> [--require-enforcement] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
 record only: warder run --config <path> --agent <id> -- <agent command>\n\
 preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
 readiness: warder doctor [--config <path>]\n\
@@ -2048,6 +2049,7 @@ pub fn create_run_session(
         cgroup_root: _,
         snapshot_root,
         launch,
+        require_enforcement: _,
         agent,
         command,
     } = command
@@ -2233,6 +2235,7 @@ pub fn launch_supervised_run(
         db,
         cgroup_root,
         launch,
+        require_enforcement,
         command: child_command,
         ..
     } = command
@@ -2254,6 +2257,7 @@ pub fn launch_supervised_run(
         return err(message.clone());
     }
     let landlock_plan = planned_landlock_restrictions(&config, environment);
+    enforce_strict_write_lockout(*require_enforcement, &config, &landlock_plan)?;
     let landlock_status = landlock_plan.status.clone();
     if let LandlockPlanStatus::Blocked(message) = landlock_status {
         return err(message);
@@ -2451,6 +2455,7 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
     let mut cgroup_root = None;
     let mut snapshot_root = None;
     let mut launch = false;
+    let mut require_enforcement = false;
     let mut agent = None;
     let mut index = 0;
     while index < options.len() {
@@ -2479,6 +2484,10 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
                 launch = true;
                 index += 1;
             }
+            "--require-enforcement" => {
+                require_enforcement = true;
+                index += 1;
+            }
             "--agent" => {
                 agent = Some(value_after(options, index, "--agent")?);
                 index += 2;
@@ -2497,6 +2506,7 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
         cgroup_root,
         snapshot_root,
         launch,
+        require_enforcement,
         agent,
         command,
     })
@@ -5842,6 +5852,35 @@ fn planned_landlock_restrictions(
         },
         rules,
     )
+}
+
+fn enforce_strict_write_lockout(
+    require_enforcement: bool,
+    config: &WarderConfig,
+    landlock_plan: &warder_enforcement::LandlockPlan,
+) -> Result<(), CliError> {
+    if !require_enforcement {
+        return Ok(());
+    }
+
+    if !config
+        .zones
+        .iter()
+        .any(|zone| zone.write_policy == WritePolicy::Deny)
+    {
+        return err(
+            "--require-enforcement needs at least one protected zone with write_policy = \"deny\"",
+        );
+    }
+
+    if landlock_plan.status == LandlockPlanStatus::Apply {
+        return Ok(());
+    }
+
+    let reason = landlock_plan_status_label(&landlock_plan.status);
+    err(format!(
+        "--require-enforcement refused to launch because protected write blocking is not active: {reason}"
+    ))
 }
 
 fn landlock_status_from_plan(status: &LandlockPlanStatus) -> LandlockStatus {

@@ -2,10 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import type { RecentSessionSummary } from "../types";
 
-const DB_PATH = ".warder/warder.sqlite3";
 const SESSION_ID_STATE_KEY = "warder.desktop.sessionId.v1";
 
-export function SessionLogs() {
+export function SessionLogs({ dbPath }: { dbPath: string }) {
   const [sessionId, setSessionId] = useState(
     () => window.localStorage.getItem(SESSION_ID_STATE_KEY) ?? "",
   );
@@ -16,7 +15,7 @@ export function SessionLogs() {
 
   useEffect(() => {
     void refreshSessions();
-  }, []);
+  }, [dbPath]);
 
   useEffect(() => {
     window.localStorage.setItem(SESSION_ID_STATE_KEY, sessionId);
@@ -26,7 +25,7 @@ export function SessionLogs() {
     setError(null);
     try {
       const items = await invoke<RecentSessionSummary[]>("recent_sessions", {
-        dbPath: DB_PATH,
+        dbPath,
         limit: 20,
       });
       setSessions(items);
@@ -41,7 +40,7 @@ export function SessionLogs() {
     setJournals("");
     try {
       const output = await invoke<string>("session_receipt_text", {
-        dbPath: DB_PATH,
+        dbPath,
         sessionId: id,
       });
       setSessionId(id);
@@ -57,7 +56,7 @@ export function SessionLogs() {
     setJournals("");
     try {
       const output = await invoke<string>("session_journals_text", {
-        dbPath: DB_PATH,
+        dbPath,
         sessionId: id,
       });
       setSessionId(id);

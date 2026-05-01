@@ -151,8 +151,11 @@ fn zones_array(draft: &GuiConfigDraft) -> toml::Value {
 
 fn description_for(path: &GuiProtectedPath) -> String {
     match (path.read_protected, path.write_protected) {
-        (true, true) => "GUI-managed path with read and write protection requested.".to_string(),
-        (true, false) => "GUI-managed path with read protection requested.".to_string(),
+        (true, true) => {
+            "GUI-managed path with read visibility noted and write protection requested."
+                .to_string()
+        }
+        (true, false) => "GUI-managed path with read visibility noted.".to_string(),
         (false, true) => "GUI-managed path with write protection requested.".to_string(),
         (false, false) => "GUI-managed path with no protection requested.".to_string(),
     }

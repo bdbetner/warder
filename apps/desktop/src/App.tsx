@@ -8,6 +8,7 @@ import { SessionLogs } from "./components/SessionLogs";
 import { SetupWizard } from "./components/SetupWizard";
 import type {
   AppPolicyState,
+  DesktopPaths,
   GuiConfigDraft,
   ProfileProtectedPathTemplate,
   ProfileTemplateCatalogEntry,
@@ -96,16 +97,22 @@ export default function App() {
   const [selectedProfileId, setSelectedProfileId] = useState(DEFAULT_PROFILE_ID);
   const [agentCommand, setAgentCommand] = useState("codex");
   const [networkJournal, setNetworkJournal] = useState(false);
+  const [requireEnforcement, setRequireEnforcement] = useState(false);
+  const [configPath, setConfigPath] = useState("");
+  const [dbPath, setDbPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     Promise.all([
+      invoke<DesktopPaths>("desktop_default_paths"),
       invoke<RecommendedProtection[]>("load_recommended_protections"),
       invoke<ProfileTemplateCatalogEntry[]>("load_profile_template_catalog"),
     ])
-      .then(([recommendedProtections, templates]) => {
+      .then(([desktopPaths, recommendedProtections, templates]) => {
         const persisted = loadPersistedState();
+        setConfigPath(persisted?.configPath ?? desktopPaths.config_path);
+        setDbPath(persisted?.dbPath ?? desktopPaths.db_path);
         setProfileTemplates(templates);
         const defaultProfile =
           templates.find((item) => item.id === DEFAULT_PROFILE_ID) ?? templates[0];
@@ -141,6 +148,7 @@ export default function App() {
         setNetworkJournal(
           persisted?.networkJournal ?? defaultProfile.template.network_journal,
         );
+        setRequireEnforcement(persisted?.requireEnforcement ?? false);
         setPaths(
           mergePersistedPaths([...selections, ...additions], persisted?.protectedPaths),
         );
@@ -160,9 +168,22 @@ export default function App() {
       selectedProfileId,
       agentCommand,
       networkJournal,
+      requireEnforcement,
+      configPath,
+      dbPath,
       protectedPaths: paths,
     });
-  }, [agentCommand, loaded, networkJournal, paths, selectedProfileId, setupOpen]);
+  }, [
+    agentCommand,
+    configPath,
+    dbPath,
+    loaded,
+    networkJournal,
+    paths,
+    requireEnforcement,
+    selectedProfileId,
+    setupOpen,
+  ]);
 
   const selectedCount = useMemo(
     () => paths.filter((path) => path.selected).length,
@@ -196,6 +217,51 @@ export default function App() {
         path.id === id ? { ...path, readProtected: !path.readProtected } : path,
       ),
     );
+  }
+
+  function toggleSnapshot(id: string) {
+    setPaths((current) =>
+      current.map((path) =>
+        path.id === id
+          ? { ...path, snapshotProtected: !path.snapshotProtected }
+          : path,
+      ),
+    );
+  }
+
+  function updatePath(id: string, patch: Partial<ProtectedPathSelection>) {
+    setPaths((current) =>
+      current.map((path) => (path.id === id ? { ...path, ...patch } : path)),
+    );
+  }
+
+  function addCustomPath(path: string, label: string) {
+    const cleanPath = path.trim();
+    if (!cleanPath) {
+      return;
+    }
+    const id = `custom-${slug(cleanPath) || Date.now().toString(36)}`;
+    setPaths((current) => [
+      ...current,
+      {
+        id,
+        label: label.trim() || cleanPath,
+        path: cleanPath,
+        kind: "sensitive-user",
+        access: "read-write",
+        reason: "Custom protected path.",
+        exists: true,
+        enabled_by_default: true,
+        selected: true,
+        readProtected: false,
+        writeProtected: true,
+        snapshotProtected: false,
+      },
+    ]);
+  }
+
+  function removePath(id: string) {
+    setPaths((current) => current.filter((path) => path.id !== id));
   }
 
   function applyProfileTemplate(profileId: string) {
@@ -244,8 +310,8 @@ export default function App() {
       network_journal: networkJournal,
     };
 
-    await invoke("save_gui_config", {
-      configPath: ".warder/gui.toml",
+      await invoke("save_gui_config", {
+      configPath,
       draft,
     });
     setSetupOpen(false);
@@ -276,7 +342,20 @@ export default function App() {
           networkJournal={networkJournal}
           onTogglePath={togglePath}
           onToggleRead={toggleRead}
+          onToggleSnapshot={toggleSnapshot}
+          onUpdatePath={updatePath}
+          onAddCustomPath={addCustomPath}
+          onRemovePath={removePath}
           onApplyProfileTemplate={applyProfileTemplate}
+          onNetworkJournalChange={setNetworkJournal}
+          configPath={configPath}
+          dbPath={dbPath}
+          agentCommand={agentCommand}
+          requireEnforcement={requireEnforcement}
+          onConfigPathChange={setConfigPath}
+          onDbPathChange={setDbPath}
+          onAgentCommandChange={setAgentCommand}
+          onRequireEnforcementChange={setRequireEnforcement}
           onComplete={saveSetup}
         />
       ) : (
@@ -288,8 +367,12 @@ export default function App() {
           />
           <ReadinessPanel />
           <div className="dashboard-grid">
-            <SessionLauncher />
-            <SessionLogs />
+            <SessionLauncher
+              configPath={configPath}
+              dbPath={dbPath}
+              requireEnforcement={requireEnforcement}
+            />
+            <SessionLogs dbPath={dbPath} />
           </div>
           <ProtectedZones paths={paths} />
           <p className="footer-note">
