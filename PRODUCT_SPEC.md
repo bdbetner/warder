@@ -58,7 +58,7 @@ A receipt is the user-facing record of a session. It should answer:
 - Was a snapshot created?
 - What should the user review next?
 
-## Current Alpha Scope
+## Current Public Beta Scope
 
 The current public beta is a Linux-first CLI with a native desktop companion.
 

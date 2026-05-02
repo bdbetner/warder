@@ -1,12 +1,12 @@
 # Roadmap
 
-Warder is currently a Linux supervised-session safety tool for local agent sessions launched through Warder. The CLI, receipt model, protected zones, desktop app, release artifacts, pre-exec cgroup tagging, seccomp escape-syscall filter, Landlock write denial, experimental read denial, and expanded journals exist. The next release should be a public beta, not a claim of always-on global sandboxing.
+Warder is currently a Linux supervised-session safety tool for local agent sessions launched through Warder. The CLI, receipt model, protected zones, desktop app, release artifacts, pre-exec cgroup tagging, seccomp escape-syscall filter, Landlock write denial, experimental read denial, and expanded journals exist. The v1.0 public beta should remain scoped to explicit supervised sessions, not a claim of always-on global sandboxing.
 
 ## Current Reviewer Feedback Focus
 
 - Keep release docs, reviewer guide, and package smoke tests aligned with the next public beta tag.
 - Collect reviewer feedback through the GitHub issue templates and turn accepted findings into focused tasks.
-- Keep README, install, release, and security docs aligned with the real implementation before each alpha tag.
+- Keep README, install, release, and security docs aligned with the real implementation before each public beta or release tag.
 - Keep receipt, dry-run, and GUI output impossible to confuse with stronger enforcement than Warder currently provides.
 - Keep degraded protections obvious before and after launch.
 - Continue validating release artifacts, checksums, and local receipt-key behavior.
@@ -28,7 +28,7 @@ Remaining hardening should focus on global always-on supervision design, broader
 
 ## Next Product Improvements
 
-- Improve reviewer onboarding from real feedback on the alpha package and demo flow.
+- Improve reviewer onboarding from real feedback on the public beta package and demo flow.
 - Add guided host-readiness remediation from `warder doctor` output.
 - Improve snapshot and guarded-revert UX on hosts without Btrfs support.
 - Expand command examples for more local agent tools as reviewers request them.

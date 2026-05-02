@@ -18,11 +18,27 @@ The first goal is practical: keep permissive local agent workflows fast while ma
 ## Start Here
 
 - New user: read [Quick Start](#quick-start), then [Protected Zones](docs/protected-zones.md).
-- Installing a release build: read [Install Notes](docs/install.md) and [Release Trust Model](docs/release-trust.md).
+- Installing a release build: read [Install Notes](docs/install.md), [Linux Compatibility](docs/linux-compatibility.md), and [Release Trust Model](docs/release-trust.md).
 - Reviewing Warder: read [Reviewer Feedback Guide](docs/reviewer-feedback.md).
 - Evaluating the safety model: read [Security Model](docs/security-model.md) and [Threat Model](THREAT_MODEL.md).
 - Looking for the project direction: read [Product Overview](PRODUCT_SPEC.md), [Vision](docs/vision.md), and [Roadmap](ROADMAP.md).
 - Looking for common scenarios: read [Examples](docs/examples/README.md) and [FAQ](docs/FAQ.md).
+
+## Why Warder v1
+
+Warder is a supervised-session safety layer for Linux users who run local AI agents, coding tools, automation scripts, or other commands that should not have unchecked access to sensitive folders.
+
+It gives you real host-side guardrails without forcing every workflow into a container, remote VM, or separate development account:
+
+- **Pre-exec supervised setup**: Warder-launched commands are assigned to a session cgroup, covered by a small seccomp escape-syscall filter, and locked down with Landlock before the target command is executed, where the host supports those features.
+- **Protected zones and Btrfs snapshots**: Declare sensitive directories, block protected writes with Landlock where available, snapshot supported Btrfs roots before risky sessions, and revert from recorded snapshots when needed.
+- **Readable journals**: Warder records protected-zone file activity with inotify and can add optional eBPF/procfs network and file-observation data where built, permitted, and supported by the kernel.
+- **Tamper-evident receipts**: Session receipts record the command, policy, active protections, degraded protections, journal coverage, snapshot state, and local hash-chain integrity. Strict launches require an external receipt key and can be checked with `warder verify-receipts`.
+- **Desktop-first review path**: The Tauri desktop app provides setup, launch-readiness review, doctor output, receipt review, and a persistent reminder that Warder supervises only Warder-launched sessions.
+
+Warder is explicitly not a full host-wide sandbox. It only supervises processes launched through `warder run` or the desktop launcher. Direct launches, background services, IDE extensions, and malware running outside Warder are unsupervised.
+
+For the v1.0 public beta, Warder is production-oriented for explicit supervised sessions, but global always-on supervision is planned for v1.1. For maximum safety today, run agents exclusively through Warder with strict mode, external receipt keys, and existing host defenses such as firewall, AppArmor, or SELinux policy where those already fit your environment.
 
 ## Why Use It
 
@@ -219,6 +235,8 @@ npm run tauri -- build --bundles deb,rpm,appimage --ci
 - [FAQ](docs/FAQ.md)
 - [Examples](docs/examples/README.md)
 - [Install Notes](docs/install.md)
+- [Linux Compatibility](docs/linux-compatibility.md)
+- [How Warder Fits](docs/comparison.md)
 - [Reviewer Feedback Guide](docs/reviewer-feedback.md)
 - [Release Trust Model](docs/release-trust.md)
 - [Release Readiness](docs/release-readiness.md)

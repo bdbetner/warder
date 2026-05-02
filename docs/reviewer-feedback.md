@@ -8,10 +8,11 @@ This guide is for public beta reviewers evaluating Warder from release artifacts
 - Release page: <https://github.com/betnbd/warder/releases/tag/v1.0.0-beta.1>
 - Platform target: Linux x86_64
 - Recommended install path: `.deb` on Ubuntu/Debian or RPM on RPM-based distros
+- Compatibility notes: [Linux Compatibility](linux-compatibility.md)
 
 ## What Warder Claims
 
-Warder supervises commands launched through `warder run`, can deny protected writes with Linux Landlock where the host supports it, can optionally apply experimental read-denial policies with an explicit readable-root allowlist, and records receipts that explain active and degraded coverage.
+Warder supervises commands launched through `warder run` or the desktop launcher, can deny protected writes with Linux Landlock where the host supports it, can optionally apply experimental read-denial policies with an explicit readable-root allowlist, and records receipts that explain active and degraded coverage.
 
 Warder does not claim read blocking by default, network blocking, complete socket forensics, receipts that cannot be altered by a local user or malware, or always-on protection for commands launched outside Warder.
 
@@ -77,7 +78,7 @@ Check these flows:
 - Does the receipt make degraded coverage hard to miss?
 - Are the GUI setup and command controls understandable for a non-expert Linux user?
 - Are any docs or UI labels overstating read protection, network enforcement, receipt integrity, or always-on protection?
-- Which missing feature would most improve trust: pre-spawn cgroup placement, stronger receipt attestation, seccomp/capability bounding, or network blocking?
+- Which missing feature would most improve trust: global always-on supervision, stronger receipt attestation, broader capability bounding, or network blocking?
 
 ## Cleanup
 

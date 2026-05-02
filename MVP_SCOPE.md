@@ -1,4 +1,4 @@
-# Alpha Scope
+# Public Beta Scope
 
 Warder's current public beta is a Linux tool a user can install and test quickly: declare protected zones, run a local agent command through Warder, inspect a readable receipt afterward, see what protections degraded, and recover with snapshots where supported.
 

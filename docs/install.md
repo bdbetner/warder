@@ -14,6 +14,8 @@ The `.deb` and RPM install both the CLI and GUI. The AppImage is GUI-only, so ke
 
 For the current public beta, the lowest-risk review path is the `.deb` or RPM because those packages install the CLI and desktop app together.
 
+Before relying on a machine for real supervised sessions, check [Linux Compatibility](linux-compatibility.md) and run `warder doctor`. Warder reports degraded protection when host features such as Landlock, cgroup v2 delegation, Btrfs, or eBPF are unavailable.
+
 ## Install From a GitHub Release
 
 Download a tagged public beta release and verify it:

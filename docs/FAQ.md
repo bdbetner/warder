@@ -6,7 +6,7 @@ No. Warder is a separate local supervision layer. Agent-specific sandboxes can s
 
 ## Does Warder protect commands launched outside Warder?
 
-No. Warder only supervises commands launched through `warder run`.
+No. Warder only supervises commands launched through `warder run` or the desktop launcher.
 
 ## What happens if Landlock is unavailable?
 

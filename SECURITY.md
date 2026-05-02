@@ -1,19 +1,20 @@
 # Security Policy
 
-Warder is an alpha Linux safety tool for supervised local agent sessions. It is designed to reduce risk with protected zones, host controls where available, and readable session receipts. It is not a guarantee that arbitrary permissive execution is safe.
+Warder is a public beta Linux safety tool for supervised local agent sessions. It is designed to reduce risk with protected zones, host controls where available, and readable session receipts. It is not a guarantee that arbitrary permissive execution is safe.
 
 ## Current Posture
 
 Warder's strongest current protection is filesystem write denial for supervised processes where Linux Landlock is available. Its strongest accountability feature is the session receipt, which records the command, policy, active protections, degraded protections, observed file activity, network-journal coverage, and snapshot state.
 
-Warder only supervises commands launched through `warder run`. It does not protect against processes started outside Warder.
+Warder only supervises commands launched through `warder run` or the desktop launcher. It does not protect against processes started outside Warder.
 
-Several security-hardening limits remain in the alpha: cgroup tagging can lag process spawn, receipt signing uses local shared-secret keys rather than public-key signatures, network destination allowlists are not enforced, file and network journals have known coverage gaps, and the desktop app must keep its IPC surface narrow as the UI grows.
+Several security-hardening limits remain in the public beta: global always-on supervision is not implemented, receipt signing uses local shared-secret keys rather than public-key signatures, network destination allowlists are not enforced, file and network journals have known coverage gaps, and the desktop app must keep its IPC surface narrow as the UI grows.
 
 ## What Warder Uses
 
-- cgroups to identify agent sessions
+- cgroups to identify agent sessions before the supervised command executes
 - Landlock for filesystem write restrictions where supported
+- seccomp for a small escape-syscall filter around supervised commands
 - inotify to watch protected paths
 - snapshots to make supported sessions reversible
 - optional eBPF collectors for file and network observation where built and permitted
