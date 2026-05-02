@@ -25,6 +25,7 @@ pub struct LaunchRequest {
     pub agent_id: String,
     pub command: Vec<String>,
     pub require_enforcement: bool,
+    pub receipt_key_path: Option<PathBuf>,
     pub accept_degraded: bool,
     pub readiness_reviewed: bool,
 }
@@ -291,6 +292,7 @@ pub fn build_launch_command_args(request: LaunchRequest) -> Result<Vec<String>, 
         request.agent_id,
         request.command,
         request.require_enforcement,
+        request.receipt_key_path.clone(),
         request.accept_degraded,
     ))
 }
@@ -307,8 +309,14 @@ pub fn launch_session(request: LaunchRequest) -> Result<LaunchSessionResult, Str
     let command = launch_request_to_cli_command(request.clone());
     let outcome = launch_supervised_run(&command, &environment, SystemTime::now())
         .map_err(|error| error.message)?;
-    let receipt = render_session_receipt_from_db(Some(request.db_path), &outcome.session_id)
-        .map_err(|error| error.message)?;
+    let receipt = warder_cli::render_session_receipt_from_db_with_options(
+        Some(request.db_path),
+        &outcome.session_id,
+        ReceiptFormat::Text,
+        request.receipt_key_path.as_deref(),
+        None,
+    )
+    .map_err(|error| error.message)?;
 
     Ok(LaunchSessionResult {
         session_id: outcome.session_id,
@@ -333,6 +341,7 @@ fn launch_request_to_cli_command(request: LaunchRequest) -> CliCommand {
         snapshot_root: None,
         launch: true,
         require_enforcement: request.require_enforcement,
+        receipt_key: request.receipt_key_path,
         accept_degraded: request.accept_degraded,
         agent: request.agent_id,
         command: request.command,
@@ -342,6 +351,7 @@ fn launch_request_to_cli_command(request: LaunchRequest) -> CliCommand {
 fn validate_launch_request(request: &LaunchRequest) -> Result<(), String> {
     validate_desktop_path(&request.config_path, "config path")?;
     validate_desktop_path(&request.db_path, "database path")?;
+    validate_optional_desktop_path(request.receipt_key_path.as_ref(), "receipt key path")?;
     validate_desktop_token(&request.agent_id, "agent id")?;
     validate_desktop_command(&request.command)
 }
@@ -411,6 +421,7 @@ pub fn build_cli_run_command(
     agent_id: String,
     command: Vec<String>,
     require_enforcement: bool,
+    receipt_key_path: Option<PathBuf>,
     accept_degraded: bool,
 ) -> Vec<String> {
     let mut args = vec![
@@ -424,6 +435,9 @@ pub fn build_cli_run_command(
     ];
     if require_enforcement {
         args.push("--require-enforcement".to_string());
+    }
+    if let Some(path) = receipt_key_path {
+        args.extend(["--receipt-key".to_string(), path.display().to_string()]);
     }
     if accept_degraded {
         args.push("--accept-degraded".to_string());

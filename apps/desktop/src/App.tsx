@@ -18,6 +18,7 @@ import type {
 
 const DEFAULT_PROFILE_ID = "codex-cli";
 const APP_STATE_KEY = "warder.desktop.state.v1";
+const DEFAULT_RECEIPT_KEY_PATH = "/run/warder-key";
 
 function toSelection(item: RecommendedProtection): ProtectedPathSelection {
   return {
@@ -98,6 +99,7 @@ export default function App() {
   const [agentCommand, setAgentCommand] = useState("codex");
   const [networkJournal, setNetworkJournal] = useState(false);
   const [requireEnforcement, setRequireEnforcement] = useState(true);
+  const [receiptKeyPath, setReceiptKeyPath] = useState(DEFAULT_RECEIPT_KEY_PATH);
   const [configPath, setConfigPath] = useState("");
   const [dbPath, setDbPath] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -150,6 +152,7 @@ export default function App() {
           persisted?.networkJournal ?? defaultProfile.template.network_journal,
         );
         setRequireEnforcement(persisted?.requireEnforcement ?? true);
+        setReceiptKeyPath(persisted?.receiptKeyPath ?? DEFAULT_RECEIPT_KEY_PATH);
         setPaths(
           mergePersistedPaths([...selections, ...additions], persisted?.protectedPaths),
         );
@@ -170,6 +173,7 @@ export default function App() {
       agentCommand,
       networkJournal,
       requireEnforcement,
+      receiptKeyPath,
       configPath,
       dbPath,
       protectedPaths: paths,
@@ -181,6 +185,7 @@ export default function App() {
     loaded,
     networkJournal,
     paths,
+    receiptKeyPath,
     requireEnforcement,
     selectedProfileId,
     setupOpen,
@@ -380,6 +385,8 @@ export default function App() {
               dbPath={dbPath}
               hasProtectedPaths={selectedCount > 0}
               requireEnforcement={requireEnforcement}
+              receiptKeyPath={receiptKeyPath}
+              onReceiptKeyPathChange={setReceiptKeyPath}
             />
             <SessionLogs dbPath={dbPath} />
           </div>

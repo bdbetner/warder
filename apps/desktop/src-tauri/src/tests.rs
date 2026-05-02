@@ -52,6 +52,7 @@ fn build_cli_run_command_includes_launch_and_db() {
         "codex".to_string(),
         vec!["codex".to_string(), "--yolo".to_string()],
         true,
+        Some(PathBuf::from("/run/warder-key")),
         false,
     );
 
@@ -66,6 +67,8 @@ fn build_cli_run_command_includes_launch_and_db() {
             "--db",
             "/tmp/warder/warder.sqlite3",
             "--require-enforcement",
+            "--receipt-key",
+            "/run/warder-key",
             "--agent",
             "codex",
             "--",
@@ -83,6 +86,7 @@ fn build_cli_run_command_includes_degraded_acknowledgement_when_requested() {
         "codex".to_string(),
         vec!["codex".to_string()],
         false,
+        None,
         true,
     );
 
@@ -131,6 +135,7 @@ fn render_launch_readiness_text_reports_gui_launch_decision() {
         db_path,
         agent_id: "local-agent".to_string(),
         require_enforcement: false,
+        receipt_key_path: None,
         accept_degraded: true,
         readiness_reviewed: false,
         command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
@@ -550,6 +555,7 @@ fn launch_session_runs_supervised_command_and_returns_receipt() {
         db_path: db_path.clone(),
         agent_id: "local-agent".to_string(),
         require_enforcement: false,
+        receipt_key_path: None,
         accept_degraded: true,
         readiness_reviewed: true,
         command: vec![
@@ -574,6 +580,7 @@ fn launch_session_refuses_without_desktop_readiness_review() {
         db_path: PathBuf::from("/tmp/warder/warder.sqlite3"),
         agent_id: "local-agent".to_string(),
         require_enforcement: false,
+        receipt_key_path: None,
         accept_degraded: true,
         readiness_reviewed: false,
         command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],

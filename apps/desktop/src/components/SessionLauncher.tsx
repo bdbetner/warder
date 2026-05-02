@@ -10,14 +10,17 @@ function launchRequest(
   configPath: string,
   dbPath: string,
   requireEnforcement: boolean,
+  receiptKeyPath: string,
   readinessReviewed: boolean,
 ): LaunchRequest {
+  const cleanReceiptKeyPath = receiptKeyPath.trim();
   return {
     config_path: configPath,
     db_path: dbPath,
     agent_id: "local-agent",
     command: splitCommand(commandText),
     require_enforcement: requireEnforcement,
+    receipt_key_path: cleanReceiptKeyPath ? cleanReceiptKeyPath : null,
     accept_degraded: !requireEnforcement,
     readiness_reviewed: readinessReviewed,
   };
@@ -28,6 +31,8 @@ interface SessionLauncherProps {
   dbPath: string;
   hasProtectedPaths: boolean;
   requireEnforcement: boolean;
+  receiptKeyPath: string;
+  onReceiptKeyPathChange: (value: string) => void;
 }
 
 export function SessionLauncher({
@@ -35,6 +40,8 @@ export function SessionLauncher({
   dbPath,
   hasProtectedPaths,
   requireEnforcement,
+  receiptKeyPath,
+  onReceiptKeyPathChange,
 }: SessionLauncherProps) {
   const [command, setCommand] = useState(
     () => window.localStorage.getItem(COMMAND_STATE_KEY) ?? "true",
@@ -55,7 +62,7 @@ export function SessionLauncher({
 
   useEffect(() => {
     setReadinessReviewed(false);
-  }, [command, configPath, dbPath, requireEnforcement]);
+  }, [command, configPath, dbPath, receiptKeyPath, requireEnforcement]);
 
   async function reviewLaunchReadiness() {
     setError(null);
@@ -70,6 +77,7 @@ export function SessionLauncher({
         configPath,
         dbPath,
         requireEnforcement,
+        receiptKeyPath,
         false,
       );
       const [readiness, cli] = await Promise.all([
@@ -98,6 +106,7 @@ export function SessionLauncher({
         configPath,
         dbPath,
         requireEnforcement,
+        receiptKeyPath,
         false,
       );
       const [readiness, output, cli] = await Promise.all([
@@ -136,6 +145,7 @@ export function SessionLauncher({
         configPath,
         dbPath,
         requireEnforcement,
+        receiptKeyPath,
         true,
       );
       const readiness = await invoke<string>("launch_readiness_text", {
@@ -165,8 +175,8 @@ export function SessionLauncher({
       </p>
       {requireEnforcement && (
         <p className="notice">
-          Strict write-block launch is enabled. Warder will refuse to start if
-          protected writes cannot be blocked.
+          Strict launch is enabled. Warder will refuse to start if protected
+          writes cannot be blocked or the external receipt key is unavailable.
         </p>
       )}
       {!requireEnforcement && (
@@ -191,6 +201,14 @@ export function SessionLauncher({
           value={command}
           placeholder="true"
           onChange={(event) => setCommand(event.target.value)}
+        />
+      </label>
+      <label className="field">
+        Receipt key
+        <input
+          value={receiptKeyPath}
+          placeholder="/run/warder-key"
+          onChange={(event) => onReceiptKeyPathChange(event.target.value)}
         />
       </label>
       <div className="toolbar">

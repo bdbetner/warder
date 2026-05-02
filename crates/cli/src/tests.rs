@@ -39,12 +39,37 @@ fn parses_run_command_after_separator() {
             snapshot_root: Some(PathBuf::from("/tmp/snapshots")),
             launch: true,
             require_enforcement: true,
+            receipt_key: None,
             accept_degraded: true,
 
             agent: "local".to_string(),
             command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
         }
     );
+}
+
+#[test]
+fn parses_run_command_with_receipt_key() {
+    let command = parse_args([
+        "warder",
+        "run",
+        "--config",
+        "/tmp/warder.toml",
+        "--launch",
+        "--require-enforcement",
+        "--receipt-key",
+        "/run/warder-key",
+        "--agent",
+        "local",
+        "--",
+        "true",
+    ])
+    .unwrap();
+
+    let CliCommand::Run { receipt_key, .. } = command else {
+        panic!("expected run command");
+    };
+    assert_eq!(receipt_key, Some(PathBuf::from("/run/warder-key")));
 }
 
 #[test]
@@ -810,6 +835,26 @@ fn parses_verify_receipts_command() {
         parse_args(["warder", "verify-receipts", "--db", "/tmp/warder.sqlite3",]).unwrap(),
         CliCommand::VerifyReceipts {
             db: Some(PathBuf::from("/tmp/warder.sqlite3")),
+            external_key: None,
+        }
+    );
+}
+
+#[test]
+fn parses_verify_receipts_external_key_alias() {
+    assert_eq!(
+        parse_args([
+            "warder",
+            "verify-receipts",
+            "--db",
+            "/tmp/warder.sqlite3",
+            "--external-key",
+            "/run/warder-key",
+        ])
+        .unwrap(),
+        CliCommand::VerifyReceipts {
+            db: Some(PathBuf::from("/tmp/warder.sqlite3")),
+            external_key: Some(PathBuf::from("/run/warder-key")),
         }
     );
 }
@@ -1006,6 +1051,7 @@ fn run_command_summary_distinguishes_launch_from_record_only() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -1018,6 +1064,7 @@ fn run_command_summary_distinguishes_launch_from_record_only() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -1034,6 +1081,7 @@ fn run_command_summary_distinguishes_launch_from_record_only() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -1779,6 +1827,7 @@ fn create_run_session_loads_config_and_persists_pending_session() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -1855,6 +1904,7 @@ fn create_run_session_persists_allowed_destination_non_enforcement_warning() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -1892,6 +1942,7 @@ fn create_run_session_rejects_required_snapshot_without_snapshot_root() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -1932,6 +1983,7 @@ fn create_run_session_rejects_required_overlayfs_snapshot_driver() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -1972,6 +2024,7 @@ fn create_run_session_marks_best_effort_snapshot_failed_without_snapshot_root() 
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2108,6 +2161,7 @@ fn create_run_session_infers_known_agent_profile_when_not_declared() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "codex".to_string(),
@@ -2153,6 +2207,7 @@ fn create_run_session_marks_disabled_cgroups_not_requested() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2195,6 +2250,7 @@ fn create_run_session_rejects_invalid_config_without_persisting() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2247,6 +2303,7 @@ fn create_run_session_marks_best_effort_snapshot_unrequested_without_backend() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2291,6 +2348,7 @@ fn apply_cgroup_tag_result_updates_session_as_tagged() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2328,6 +2386,7 @@ fn apply_cgroup_tag_result_records_unsupported_as_degraded_reason() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2396,6 +2455,7 @@ fn prepare_supervised_run_records_session_and_applies_cgroup_tag() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2441,6 +2501,7 @@ fn launch_supervised_run_spawns_child_tags_pid_and_marks_completed() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -2485,6 +2546,7 @@ fn launch_supervised_run_persists_nonzero_exit_code() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -2515,6 +2577,7 @@ fn launch_supervised_run_blocks_required_cgroups_without_root() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2545,6 +2608,7 @@ fn launch_supervised_run_degrades_best_effort_cgroups_without_root() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -2591,6 +2655,7 @@ fn launch_supervised_run_refuses_degraded_launch_without_acknowledgement_before_
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2628,6 +2693,7 @@ fn render_pre_launch_readiness_for_run_reports_launch_decision() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2680,6 +2746,7 @@ fn launch_supervised_run_blocks_required_cgroups_with_invalid_root_before_launch
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -2721,6 +2788,7 @@ fn launch_supervised_run_degrades_best_effort_cgroups_with_invalid_root() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -2787,6 +2855,7 @@ fn launch_supervised_run_persists_inotify_file_journal_events() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -2860,6 +2929,7 @@ fn launch_supervised_run_persists_inotify_events_inside_created_directories() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -2910,6 +2980,7 @@ fn launch_supervised_run_records_dependency_file_diff() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -2955,6 +3026,7 @@ fn launch_supervised_run_records_ebpf_journal_degraded_reason() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -3005,6 +3077,7 @@ fn launch_supervised_run_records_unwired_ebpf_attach_reason() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -3047,6 +3120,7 @@ fn launch_supervised_run_blocks_when_landlock_is_required_but_kernel_is_unavaila
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -3087,6 +3161,7 @@ fn launch_supervised_run_strict_mode_blocks_degraded_write_lockout() {
         snapshot_root: None,
         launch: true,
         require_enforcement: true,
+        receipt_key: None,
         accept_degraded: false,
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 99".to_string()],
@@ -3128,6 +3203,7 @@ fn launch_supervised_run_best_effort_still_records_degraded_write_lockout() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
@@ -3198,6 +3274,7 @@ fn launch_supervised_run_marks_session_failed_when_spawn_fails() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -3243,6 +3320,7 @@ fn launch_supervised_run_marks_session_failed_when_cgroup_tagging_errors() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local".to_string(),
@@ -3282,6 +3360,7 @@ fn wait_failure_marks_session_failed_with_reason() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: false,
 
         agent: "local".to_string(),
@@ -4518,6 +4597,43 @@ fn render_receipt_integrity_report_accepts_valid_hash_chain() {
     assert!(report.contains("integrity log entries: 1"));
 
     let _ = std::fs::remove_file(db_path);
+}
+
+#[test]
+fn render_receipt_integrity_report_validates_external_key() {
+    let db_path = temp_file("warder-cli-receipt-integrity-external-db", "sqlite3");
+    let key_path = temp_file("warder-cli-receipt-integrity-external-key", "key");
+    initialize_receipt_signing_key(&key_path, true).unwrap();
+    let db = WarderDb::open(&db_path).unwrap();
+    db.migrate().unwrap();
+    db.create_session(&receipt_test_session()).unwrap();
+
+    let report =
+        render_receipt_integrity_report_with_external_key(Some(db_path.clone()), Some(&key_path))
+            .unwrap();
+
+    assert!(report.contains("receipt integrity: ok"));
+    assert!(report.contains("external receipt key: ok"));
+
+    let _ = std::fs::remove_file(db_path);
+    let _ = std::fs::remove_file(key_path);
+}
+
+#[test]
+fn strict_receipt_key_validation_requires_external_key() {
+    let error = validate_strict_receipt_key(true, None).unwrap_err();
+
+    assert!(error.message.contains("--receipt-key"));
+}
+
+#[test]
+fn strict_receipt_key_validation_accepts_private_key_file() {
+    let key_path = temp_file("warder-cli-strict-receipt-key", "key");
+    initialize_receipt_signing_key(&key_path, true).unwrap();
+
+    validate_strict_receipt_key(true, Some(&key_path)).unwrap();
+
+    let _ = std::fs::remove_file(key_path);
 }
 
 #[test]
@@ -5876,6 +5992,7 @@ fn quickstart_demo_config_allows_no_cgroup_root_launch_with_degraded_tagging() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        receipt_key: None,
         accept_degraded: true,
 
         agent: "local-shell".to_string(),

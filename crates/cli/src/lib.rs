@@ -67,6 +67,7 @@ pub enum CliCommand {
         snapshot_root: Option<PathBuf>,
         launch: bool,
         require_enforcement: bool,
+        receipt_key: Option<PathBuf>,
         accept_degraded: bool,
         agent: String,
         command: Vec<String>,
@@ -89,6 +90,7 @@ pub enum CliCommand {
     },
     VerifyReceipts {
         db: Option<PathBuf>,
+        external_key: Option<PathBuf>,
     },
     Snapshot {
         session_id: String,
@@ -407,11 +409,27 @@ pub fn command_summary(command: &CliCommand) -> String {
             output.display(),
             if *force { " with overwrite" } else { "" }
         ),
-        CliCommand::VerifyReceipts { db: Some(db) } => {
-            format!("receipt integrity verification requested for '{}'", db.display())
-        }
-        CliCommand::VerifyReceipts { db: None } => {
-            "receipt integrity verification requested".to_string()
+        CliCommand::VerifyReceipts {
+            db: Some(db),
+            external_key,
+        } => format!(
+            "receipt integrity verification requested for '{}'{}",
+            db.display(),
+            if external_key.is_some() {
+                " with external key"
+            } else {
+                ""
+            }
+        ),
+        CliCommand::VerifyReceipts {
+            db: None,
+            external_key,
+        } => {
+            if external_key.is_some() {
+                "receipt integrity verification requested with external key".to_string()
+            } else {
+                "receipt integrity verification requested".to_string()
+            }
         }
         CliCommand::Snapshot {
             session_id,
@@ -1419,6 +1437,20 @@ pub fn render_session_receipt_from_db_with_options(
 }
 
 pub fn render_receipt_integrity_report(db_path: Option<PathBuf>) -> Result<String, CliError> {
+    render_receipt_integrity_report_with_external_key(db_path, None)
+}
+
+pub fn render_receipt_integrity_report_with_external_key(
+    db_path: Option<PathBuf>,
+    external_key: Option<&Path>,
+) -> Result<String, CliError> {
+    let external_key_status = match external_key {
+        Some(path) => {
+            read_receipt_signing_key(path)?;
+            Some(format!("external receipt key: ok ({})", path.display()))
+        }
+        None => None,
+    };
     let db_path = db_path.unwrap_or_else(default_db_path);
     let db = WarderDb::open(&db_path).map_err(db_error)?;
     db.migrate().map_err(db_error)?;
@@ -1438,12 +1470,16 @@ pub fn render_receipt_integrity_report(db_path: Option<PathBuf>) -> Result<Strin
         return err(lines.join("\n"));
     }
 
-    Ok(format!(
-        "receipt integrity: ok\nsessions checked: {}\nintegrity log entries: {}\ndatabase: {}",
-        report.verified_sessions,
-        report.log_entries,
-        db_path.display()
-    ))
+    let mut lines = vec![
+        "receipt integrity: ok".to_string(),
+        format!("sessions checked: {}", report.verified_sessions),
+        format!("integrity log entries: {}", report.log_entries),
+        format!("database: {}", db_path.display()),
+    ];
+    if let Some(status) = external_key_status {
+        lines.push(status);
+    }
+    Ok(lines.join("\n"))
 }
 
 fn render_receipt_output(
@@ -2072,7 +2108,7 @@ impl DaemonTerminator for CommandDaemonTerminator {
 
 pub fn usage() -> &'static str {
     "usage: warder <command>\n\
-primary: warder run --config <path> --launch --agent <id> [--require-enforcement] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
+primary: warder run --config <path> --launch --agent <id> [--require-enforcement --receipt-key <path>] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
 record only: warder run --config <path> --agent <id> -- <agent command>\n\
 preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
 readiness: warder doctor [--config <path>]\n\
@@ -2080,7 +2116,7 @@ init: warder init --protected-path <path> [--output <path>] [--profile <id>] [--
 profiles: warder profiles [--format text|json]\n\
 snapshot: warder snapshot --config <path> --session <id> --snapshot-root <path>\n\
 recovery: warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]\n\
-inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>|--receipt-key <path>] [--verify-signature <hex>] | warder verify-receipts [--db <path>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status\n\
+inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>|--receipt-key <path>] [--verify-signature <hex>] | warder verify-receipts [--db <path>] [--external-key <path>|--receipt-key <path>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status\n\
 keys: warder receipt-key init [--output <path>] [--force]\n\
 daemon optional: warder start|stop"
 }
@@ -2097,6 +2133,7 @@ pub fn create_run_session(
         snapshot_root,
         launch,
         require_enforcement: _,
+        receipt_key: _,
         accept_degraded: _,
         agent,
         command,
@@ -2284,6 +2321,7 @@ pub fn launch_supervised_run(
         cgroup_root,
         launch,
         require_enforcement,
+        receipt_key,
         accept_degraded,
         command: child_command,
         ..
@@ -2315,6 +2353,7 @@ pub fn launch_supervised_run(
         &snapshot_plan,
     );
     enforce_strict_write_lockout(*require_enforcement, &config, &landlock_plan)?;
+    enforce_strict_receipt_key(*require_enforcement, receipt_key.as_deref())?;
     enforce_degraded_launch_acceptance(*accept_degraded, &launch_readiness)?;
     let landlock_status = landlock_plan.status.clone();
     if let LandlockPlanStatus::Blocked(message) = landlock_status {
@@ -2514,6 +2553,7 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
     let mut snapshot_root = None;
     let mut launch = false;
     let mut require_enforcement = false;
+    let mut receipt_key = None;
     let mut accept_degraded = false;
     let mut agent = None;
     let mut index = 0;
@@ -2547,6 +2587,10 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
                 require_enforcement = true;
                 index += 1;
             }
+            "--receipt-key" => {
+                receipt_key = Some(PathBuf::from(value_after(options, index, "--receipt-key")?));
+                index += 2;
+            }
             "--accept-degraded" => {
                 accept_degraded = true;
                 index += 1;
@@ -2570,6 +2614,7 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
         snapshot_root,
         launch,
         require_enforcement,
+        receipt_key,
         accept_degraded,
         agent,
         command,
@@ -2745,6 +2790,7 @@ fn parse_receipt_key(args: Vec<String>) -> Result<CliCommand, CliError> {
 
 fn parse_verify_receipts(args: Vec<String>) -> Result<CliCommand, CliError> {
     let mut db = None;
+    let mut external_key = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -2752,10 +2798,18 @@ fn parse_verify_receipts(args: Vec<String>) -> Result<CliCommand, CliError> {
                 db = Some(PathBuf::from(value_after(&args, index, "--db")?));
                 index += 2;
             }
+            "--external-key" | "--receipt-key" => {
+                external_key = Some(PathBuf::from(value_after(
+                    &args,
+                    index,
+                    args[index].as_str(),
+                )?));
+                index += 2;
+            }
             unknown => return err(format!("unknown verify-receipts option '{unknown}'")),
         }
     }
-    Ok(CliCommand::VerifyReceipts { db })
+    Ok(CliCommand::VerifyReceipts { db, external_key })
 }
 
 fn parse_profiles(args: Vec<String>) -> Result<CliCommand, CliError> {
@@ -3597,6 +3651,8 @@ pub fn render_pre_launch_readiness_for_run(
         config,
         cgroup_root,
         launch,
+        require_enforcement,
+        receipt_key,
         accept_degraded,
         ..
     } = command
@@ -3613,13 +3669,17 @@ pub fn render_pre_launch_readiness_for_run(
     let cgroup_plan = planned_launch_cgroup_tagging(&config, cgroup_root.as_ref());
     let landlock_plan = planned_landlock_restrictions(&config, environment);
     let snapshot_plan = planned_snapshot_plan(&config, environment);
-    let launch_readiness = planned_launch_readiness(
+    let mut launch_readiness = planned_launch_readiness(
         &config,
         environment,
         &cgroup_plan,
         &landlock_plan,
         &snapshot_plan,
     );
+    if let Err(error) = validate_strict_receipt_key(*require_enforcement, receipt_key.as_deref()) {
+        push_unique(&mut launch_readiness.blocked_reasons, error.message);
+        launch_readiness.level = ReadinessLevel::Blocked;
+    }
 
     let mut lines = vec![render_host_readiness(&assess_environment_readiness(
         environment,
@@ -6144,6 +6204,28 @@ fn enforce_strict_write_lockout(
     err(format!(
         "--require-enforcement refused to launch because protected write blocking is not active: {reason}"
     ))
+}
+
+fn enforce_strict_receipt_key(
+    require_enforcement: bool,
+    receipt_key: Option<&Path>,
+) -> Result<(), CliError> {
+    validate_strict_receipt_key(require_enforcement, receipt_key)
+}
+
+fn validate_strict_receipt_key(
+    require_enforcement: bool,
+    receipt_key: Option<&Path>,
+) -> Result<(), CliError> {
+    if !require_enforcement {
+        return Ok(());
+    }
+    let Some(path) = receipt_key else {
+        return err(
+            "--require-enforcement requires --receipt-key <path> so strict sessions can produce externally signed receipts",
+        );
+    };
+    read_receipt_signing_key(path).map(|_| ())
 }
 
 fn landlock_status_from_plan(status: &LandlockPlanStatus) -> LandlockStatus {

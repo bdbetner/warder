@@ -169,9 +169,9 @@ Read [Security Model](docs/security-model.md), [Threat Model](THREAT_MODEL.md), 
 warder init --protected-path <path> [--output <path>] [--profile <id>] [--agent-command <command>] [--force] [--print]
 warder explain --config <path>
 warder dry-run --config <path> --agent <id> -- <agent command>
-warder run --config <path> --launch --agent <id> [--require-enforcement] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>
+warder run --config <path> --launch --agent <id> [--require-enforcement --receipt-key <path>] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>
 warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>|--receipt-key <path>] [--verify-signature <hex>]
-warder verify-receipts [--db <path>]
+warder verify-receipts [--db <path>] [--external-key <path>|--receipt-key <path>]
 warder receipt-key init [--output <path>] [--force]
 warder journal [--db <path>] [--file|--network|--all] [--session <id>]
 warder snapshot --config <path> --session <id> --snapshot-root <path>

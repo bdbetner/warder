@@ -70,7 +70,7 @@ This is local shared-secret integrity, not public-key non-repudiation. A process
 Warder stores a local hash-chain entry whenever a session record is created or updated. This lets reviewers detect common local tampering such as edited session rows or missing integrity history:
 
 ```sh
-warder verify-receipts --db .warder/warder.db
+warder verify-receipts --db .warder/warder.db --external-key /run/warder-key
 ```
 
 The command fails closed if any session has no integrity entry, if the chain links are inconsistent, or if the current session record no longer matches the latest logged payload hash. This is still local accountability, not tamper-proof forensics: a process with write access to Warder's state can attempt to alter both the data and the chain.

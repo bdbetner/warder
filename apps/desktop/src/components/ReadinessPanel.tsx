@@ -37,8 +37,8 @@ export function ReadinessPanel() {
           <p className="eyebrow">Host readiness</p>
           <h2>{readiness ? readiness.level : "Checking host"}</h2>
         </div>
-        <button className="icon-button" onClick={loadReadiness} aria-label="Refresh host readiness">
-          Refresh
+        <button className="icon-button" onClick={loadReadiness} aria-label="Run Warder Doctor">
+          Warder Doctor
         </button>
       </div>
       {error ? (

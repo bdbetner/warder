@@ -25,6 +25,7 @@ export interface AppPolicyState {
   agentCommand: string;
   networkJournal: boolean;
   requireEnforcement: boolean;
+  receiptKeyPath: string;
   configPath: string;
   dbPath: string;
   protectedPaths: ProtectedPathSelection[];
@@ -82,6 +83,7 @@ export interface LaunchRequest {
   agent_id: string;
   command: string[];
   require_enforcement: boolean;
+  receipt_key_path: string | null;
   accept_degraded: boolean;
   readiness_reviewed: boolean;
 }

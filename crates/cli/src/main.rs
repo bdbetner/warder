@@ -224,8 +224,11 @@ fn main() {
                 Err(error) => exit_with_error(error),
             }
         }
-        Ok(warder_cli::CliCommand::VerifyReceipts { db }) => {
-            match warder_cli::render_receipt_integrity_report(db) {
+        Ok(warder_cli::CliCommand::VerifyReceipts { db, external_key }) => {
+            match warder_cli::render_receipt_integrity_report_with_external_key(
+                db,
+                external_key.as_deref(),
+            ) {
                 Ok(report) => println!("{report}"),
                 Err(error) => exit_with_error(error),
             }
@@ -282,10 +285,19 @@ fn exit_with_error(error: warder_cli::CliError) -> ! {
 }
 
 fn print_session_receipt(command: &warder_cli::CliCommand, session_id: &str) {
-    let warder_cli::CliCommand::Run { db, .. } = command else {
+    let warder_cli::CliCommand::Run {
+        db, receipt_key, ..
+    } = command
+    else {
         return;
     };
-    match warder_cli::render_session_receipt_from_db(db.clone(), session_id) {
+    match warder_cli::render_session_receipt_from_db_with_options(
+        db.clone(),
+        session_id,
+        warder_cli::ReceiptFormat::Text,
+        receipt_key.as_deref(),
+        None,
+    ) {
         Ok(receipt) => println!("{receipt}"),
         Err(error) => eprintln!(
             "warning: failed to render session receipt: {}",
