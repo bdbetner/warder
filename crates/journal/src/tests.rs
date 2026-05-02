@@ -1109,6 +1109,17 @@ fn ebpf_attach_plan_blocks_without_bpffs() {
 }
 
 #[test]
+fn default_ebpf_file_tracepoints_cover_more_than_openat() {
+    let tracepoints = default_ebpf_file_tracepoints();
+
+    assert!(tracepoints.contains(&("warder_file_access", "sys_enter_openat")));
+    assert!(tracepoints.contains(&("warder_file_openat2", "sys_enter_openat2")));
+    assert!(tracepoints.contains(&("warder_file_renameat2", "sys_enter_renameat2")));
+    assert!(tracepoints.contains(&("warder_file_unlinkat", "sys_enter_unlinkat")));
+    assert!(tracepoints.contains(&("warder_file_truncate", "sys_enter_truncate")));
+}
+
+#[test]
 fn ebpf_attach_plan_degrades_until_live_reader_exists() {
     let plan = plan_ebpf_file_journal_attach(EbpfFileJournalSupport {
         bpffs_available: true,

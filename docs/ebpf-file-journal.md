@@ -28,13 +28,13 @@ Warder filters observed live eBPF file events before persistence: protected-zone
 
 ## Current Coverage Limits
 
-The current alpha eBPF file journal is an observation aid, not an enforcement boundary. The bundled object traces `syscalls:sys_enter_openat` by default. That means it can miss file activity through other syscall paths such as `openat2`, `creat`, `rename`, `link`, `symlink`, `truncate`, writes through already-open file descriptors, writable memory maps, bind mounts, namespace changes, or any activity that happens before Warder can attribute the process tree.
+The current eBPF file journal is an observation aid, not an enforcement boundary. The bundled object traces common path-based file syscalls by default, including `open`, `openat`, `openat2`, `creat`, `truncate`, `rename*`, `link*`, `symlink*`, `unlink*`, `mkdir*`, and `mknod*`. It can still miss file activity through writes on already-open file descriptors, writable memory maps, bind mounts, namespace changes, unsupported syscall families, or any activity that happens before Warder can attribute the process tree.
 
 Because of those limits, receipts must treat live eBPF as degraded or incomplete visibility unless a privileged validation host has explicitly tested the required hooks for that release. Landlock write denial remains the v1 write-blocking path; eBPF journals should not be described as write enforcement, read blocking, or complete file forensics.
 
 The bundled object provides:
 
-- a tracepoint program named `warder_file_access`, or `WARDER_EBPF_FILE_PROGRAM`;
+- tracepoint programs for the default path-based syscall set, or one override program selected with `WARDER_EBPF_FILE_PROGRAM`;
 - a perf event array map named `EVENTS`, or `WARDER_EBPF_FILE_MAP`;
 - fixed-size event payloads using Warder's raw file-access ABI: native-endian `u32 pid`, `u8 operation`, `u8 denied`, `u64 unix_timestamp_nanos`, and a 256-byte NUL-terminated path.
 

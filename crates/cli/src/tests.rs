@@ -2609,6 +2609,7 @@ fn render_pre_launch_readiness_for_run_reports_launch_decision() {
     assert!(readiness.contains("launch readiness: degraded"));
     assert!(readiness.contains("launch degraded reasons:"));
     assert!(readiness.contains("--cgroup-root"));
+    assert!(readiness.contains("eBPF file journaling unavailable"));
     assert!(readiness.contains("launch decision: refused unless --accept-degraded"));
 
     let mut accepted_command = command.clone();

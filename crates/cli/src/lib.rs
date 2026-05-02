@@ -3640,6 +3640,11 @@ fn planned_launch_readiness(
 
     append_snapshot_plan_validation(snapshot_plan, &mut blocked_reasons, &mut degraded_reasons);
     if config.network.journal {
+        if let warder_journal::EbpfFileJournalAttachStatus::Unavailable(message) =
+            planned_ebpf_file_journal_attach(environment).status
+        {
+            push_unique(&mut degraded_reasons, message);
+        }
         if let warder_journal::EbpfNetworkJournalAttachStatus::Unavailable(message) =
             planned_ebpf_network_journal_attach(config, environment).status
         {

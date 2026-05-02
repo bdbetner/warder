@@ -56,7 +56,7 @@ commit="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
   printf -- '- Package-manager signatures are not included in this alpha release.\n'
   printf -- '- GitHub artifact attestations are available only when the repository supports them.\n'
   printf -- '- `warder init` can write starter TOML or print it to stdout with `--print` for preview and shell redirection.\n'
-  printf -- '- Live eBPF file journaling is opt-in; live network eBPF collection currently covers TCP `connect(2)` plus UDP `sendto(2)`/`sendmsg(2)`/`sendmmsg(2)` attempts when host privileges allow it, and supervised runs also snapshot connected sockets from procfs for the supervised process tree when readable.\n'
+  printf -- '- Live eBPF file journaling is opt-in and covers common path-based file syscalls, but not already-open file descriptor writes or writable memory maps; live network eBPF collection currently covers TCP `connect(2)` plus UDP `sendto(2)`/`sendmsg(2)`/`sendmmsg(2)` attempts when host privileges allow it, and supervised runs also snapshot connected sockets from procfs for the supervised process tree when readable.\n'
   printf -- '- Network journaling is accountability evidence, not complete socket forensics or network enforcement.\n'
   printf -- '- Warder still reports degraded protection honestly when host kernel support is unavailable or incomplete.\n\n'
   printf 'Commit: `%s`\n' "$commit"

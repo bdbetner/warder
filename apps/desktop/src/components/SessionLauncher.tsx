@@ -41,6 +41,7 @@ export function SessionLauncher({
   const [launchResult, setLaunchResult] = useState<LaunchSessionResult | null>(
     null,
   );
+  const [launchReadiness, setLaunchReadiness] = useState("");
   const [cliCommand, setCliCommand] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -58,7 +59,8 @@ export function SessionLauncher({
     }
     try {
       const request = launchRequest(command, configPath, dbPath, requireEnforcement);
-      const [output, cli] = await Promise.all([
+      const [readiness, output, cli] = await Promise.all([
+        invoke<string>("launch_readiness_text", { request }),
         invoke<string>("dry_run_text", {
           configPath,
           agentId: request.agent_id,
@@ -66,6 +68,7 @@ export function SessionLauncher({
         }),
         invoke<string[]>("build_launch_command", { request }),
       ]);
+      setLaunchReadiness(readiness);
       setDryRun(output);
       setCliCommand(formatShellCommand(cli));
     } catch (reason) {
@@ -82,6 +85,10 @@ export function SessionLauncher({
     setRunning(true);
     try {
       const request = launchRequest(command, configPath, dbPath, requireEnforcement);
+      const readiness = await invoke<string>("launch_readiness_text", {
+        request,
+      });
+      setLaunchReadiness(readiness);
       const result = await invoke<LaunchSessionResult>("launch_session_command", {
         request,
       });
@@ -146,6 +153,15 @@ export function SessionLauncher({
         </div>
       )}
       {error && <pre className="output error">{error}</pre>}
+      {launchReadiness && (
+        <div className="result-card">
+          <div className="result-header">
+            <strong>Launch readiness</strong>
+            <span className="badge">Doctor</span>
+          </div>
+          <pre className="output">{launchReadiness}</pre>
+        </div>
+      )}
       {dryRun && (
         <div className="result-card">
           <div className="result-header">

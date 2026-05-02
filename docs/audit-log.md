@@ -36,7 +36,7 @@ See [eBPF File Journal](ebpf-file-journal.md) for privileged-host file-journal d
 
 ## Network Visibility Contract
 
-The current live network journal is limited to observed TCP `connect(2)` and UDP `sendto(2)`, `sendmsg(2)`, and `sendmmsg(2)` attempts when live eBPF network journaling is built, configured, and attached, plus procfs connected-socket snapshots during supervised runs when `/proc/<pid>/fd`, `/proc/<pid>/stat`, and `/proc/<pid>/net/*` are readable for the supervised process tree. It is local accountability evidence, not complete socket forensics and not network enforcement.
+The current live file eBPF journal covers common path-based file syscalls when built, configured, and attached, but it does not cover write activity through already-open file descriptors or writable memory maps. The current live network journal is limited to observed TCP `connect(2)` and UDP `sendto(2)`, `sendmsg(2)`, and `sendmmsg(2)` attempts when live eBPF network journaling is built, configured, and attached, plus procfs connected-socket snapshots during supervised runs when `/proc/<pid>/fd`, `/proc/<pid>/stat`, and `/proc/<pid>/net/*` are readable for the supervised process tree. It is local accountability evidence, not complete socket forensics and not network enforcement.
 
 Known blind spots include short-lived sockets that open and close between procfs polls, connected-socket writes where procfs is unreadable, `write(2)`/`writev(2)`-style writes on already-connected sockets, batched `sendmmsg(2)` destinations after the first message, sockets in processes outside the supervised process tree, destination interpretation above the syscall sockaddr layer, and traffic outside the supervised process attribution window.
 

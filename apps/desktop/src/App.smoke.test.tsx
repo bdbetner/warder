@@ -86,6 +86,10 @@ function installInvokeMock() {
         return Promise.resolve("dry run\nvalidation: ok");
       case "build_launch_command":
         return Promise.resolve(["warder", "run", "--launch", "--", "true"]);
+      case "launch_readiness_text":
+        return Promise.resolve(
+          "host readiness: degraded\nlaunch readiness: degraded\nlaunch decision: degraded launch accepted by --accept-degraded",
+        );
       case "launch_session_command":
         return Promise.resolve({
           session_id: "session-smoke",
@@ -164,6 +168,7 @@ describe("Warder desktop smoke flow", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Dry run" }));
+    expect(await screen.findByText(/launch readiness: degraded/)).toBeInTheDocument();
     expect(await screen.findByText(/validation: ok/)).toBeInTheDocument();
     expect(screen.getByText(/warder run --launch/)).toBeInTheDocument();
 

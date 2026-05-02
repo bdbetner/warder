@@ -1,8 +1,8 @@
 use crate::{
     build_cli_run_command, host_readiness, launch_session, list_recent_sessions,
     load_profile_templates_for_context, load_recommended_protections_for_home, render_dry_run_text,
-    render_session_journals_text, render_session_receipt_json_text, render_session_receipt_text,
-    restore_snapshot_for_session, save_gui_config_file, LaunchRequest,
+    render_launch_readiness_text, render_session_journals_text, render_session_receipt_json_text,
+    render_session_receipt_text, restore_snapshot_for_session, save_gui_config_file, LaunchRequest,
 };
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
@@ -92,6 +92,54 @@ fn build_cli_run_command_includes_degraded_acknowledgement_when_requested() {
     assert!(!command
         .iter()
         .any(|argument| argument == "--require-enforcement"));
+}
+
+#[test]
+fn render_launch_readiness_text_reports_gui_launch_decision() {
+    let root =
+        std::env::temp_dir().join(format!("warder-desktop-readiness-{}", std::process::id()));
+    let protected = root.join("protected");
+    let config_path = root.join("gui.toml");
+    let db_path = root.join("warder.sqlite3");
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&protected).expect("protected root");
+
+    save_gui_config_file(
+        config_path.clone(),
+        GuiConfigDraft {
+            agent: GuiAgentConfig {
+                id: "local-agent".to_string(),
+                label: "Local Agent".to_string(),
+                command: "sh".to_string(),
+                profile: None,
+            },
+            protected_paths: vec![GuiProtectedPath {
+                id: "protected".to_string(),
+                label: "Protected".to_string(),
+                path: protected.display().to_string(),
+                read_protected: false,
+                write_protected: true,
+                snapshot: false,
+            }],
+            network_journal: false,
+        },
+    )
+    .expect("config saved");
+
+    let readiness = render_launch_readiness_text(LaunchRequest {
+        config_path,
+        db_path,
+        agent_id: "local-agent".to_string(),
+        require_enforcement: false,
+        accept_degraded: true,
+        command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+    })
+    .expect("launch readiness");
+
+    assert!(readiness.contains("launch readiness: degraded"));
+    assert!(readiness.contains("launch decision: degraded launch accepted"));
+
+    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]

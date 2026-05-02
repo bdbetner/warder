@@ -5,9 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use warder_cli::{
     assess_host_readiness, environment_support_from_probe, known_agent_profile_catalog,
     launch_supervised_run, render_all_journals_from_db, render_dry_run_from_config,
-    render_host_readiness, render_revert_preview, render_session_receipt_from_db,
-    render_session_receipt_from_db_with_format, restore_snapshot_from_root_for_session, CliCommand,
-    ReadinessLevel, ReceiptFormat,
+    render_host_readiness, render_pre_launch_readiness_for_run, render_revert_preview,
+    render_session_receipt_from_db, render_session_receipt_from_db_with_format,
+    restore_snapshot_from_root_for_session, CliCommand, ReadinessLevel, ReceiptFormat,
 };
 use warder_core::{SessionRecord, SessionStatus};
 use warder_gui_support::config::{render_gui_config_toml, GuiConfigDraft};
@@ -297,17 +297,7 @@ pub fn build_launch_command_args(request: LaunchRequest) -> Result<Vec<String>, 
 pub fn launch_session(request: LaunchRequest) -> Result<LaunchSessionResult, String> {
     validate_launch_request(&request)?;
     let environment = environment_support_from_probe(warder_daemon::probe_current_host());
-    let command = CliCommand::Run {
-        config: Some(request.config_path),
-        db: Some(request.db_path.clone()),
-        cgroup_root: None,
-        snapshot_root: None,
-        launch: true,
-        require_enforcement: request.require_enforcement,
-        accept_degraded: request.accept_degraded,
-        agent: request.agent_id,
-        command: request.command,
-    };
+    let command = launch_request_to_cli_command(request.clone());
     let outcome = launch_supervised_run(&command, &environment, SystemTime::now())
         .map_err(|error| error.message)?;
     let receipt = render_session_receipt_from_db(Some(request.db_path), &outcome.session_id)
@@ -319,6 +309,27 @@ pub fn launch_session(request: LaunchRequest) -> Result<LaunchSessionResult, Str
         validation_warnings: outcome.validation_warnings,
         receipt,
     })
+}
+
+pub fn render_launch_readiness_text(request: LaunchRequest) -> Result<String, String> {
+    validate_launch_request(&request)?;
+    let environment = environment_support_from_probe(warder_daemon::probe_current_host());
+    let command = launch_request_to_cli_command(request);
+    render_pre_launch_readiness_for_run(&command, &environment).map_err(|error| error.message)
+}
+
+fn launch_request_to_cli_command(request: LaunchRequest) -> CliCommand {
+    CliCommand::Run {
+        config: Some(request.config_path),
+        db: Some(request.db_path),
+        cgroup_root: None,
+        snapshot_root: None,
+        launch: true,
+        require_enforcement: request.require_enforcement,
+        accept_degraded: request.accept_degraded,
+        agent: request.agent_id,
+        command: request.command,
+    }
 }
 
 fn validate_launch_request(request: &LaunchRequest) -> Result<(), String> {
@@ -538,6 +549,11 @@ fn launch_session_command(request: LaunchRequest) -> Result<LaunchSessionResult,
 }
 
 #[tauri::command]
+fn launch_readiness_text(request: LaunchRequest) -> Result<String, String> {
+    render_launch_readiness_text(request)
+}
+
+#[tauri::command]
 fn app_ready() -> &'static str {
     "warder desktop ready"
 }
@@ -559,6 +575,7 @@ pub fn run() {
             host_readiness_summary,
             desktop_default_paths,
             build_launch_command,
+            launch_readiness_text,
             launch_session_command
         ])
         .run(tauri::generate_context!())

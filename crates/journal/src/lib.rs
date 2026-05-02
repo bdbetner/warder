@@ -114,6 +114,29 @@ pub enum EbpfFileJournalAttachStatus {
     Unavailable(String),
 }
 
+pub fn default_ebpf_file_tracepoints() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("warder_file_access", "sys_enter_openat"),
+        ("warder_file_open", "sys_enter_open"),
+        ("warder_file_openat2", "sys_enter_openat2"),
+        ("warder_file_creat", "sys_enter_creat"),
+        ("warder_file_truncate", "sys_enter_truncate"),
+        ("warder_file_rename", "sys_enter_rename"),
+        ("warder_file_renameat", "sys_enter_renameat"),
+        ("warder_file_renameat2", "sys_enter_renameat2"),
+        ("warder_file_link", "sys_enter_link"),
+        ("warder_file_linkat", "sys_enter_linkat"),
+        ("warder_file_symlink", "sys_enter_symlink"),
+        ("warder_file_symlinkat", "sys_enter_symlinkat"),
+        ("warder_file_unlink", "sys_enter_unlink"),
+        ("warder_file_unlinkat", "sys_enter_unlinkat"),
+        ("warder_file_mkdir", "sys_enter_mkdir"),
+        ("warder_file_mkdirat", "sys_enter_mkdirat"),
+        ("warder_file_mknod", "sys_enter_mknod"),
+        ("warder_file_mknodat", "sys_enter_mknodat"),
+    ]
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct EbpfNetworkJournalSupport {
     pub bpffs_available: bool,
@@ -1132,8 +1155,6 @@ impl EbpfNetworkEgressReader for LiveEbpfNetworkEgressReader {
 impl AyaLiveEbpfFileAccessReader {
     fn attach(object_path: PathBuf) -> Result<Self, FileJournalWatchError> {
         use aya::maps::perf::PerfEventArray;
-        use aya::programs::TracePoint;
-        use std::convert::TryInto;
 
         let mut bpf = aya::Ebpf::load_file(&object_path).map_err(|error| {
             watch_error(format!(
@@ -1142,39 +1163,29 @@ impl AyaLiveEbpfFileAccessReader {
             ))
         })?;
 
-        let program_name = std::env::var("WARDER_EBPF_FILE_PROGRAM")
-            .unwrap_or_else(|_| "warder_file_access".to_string());
-        let tracepoint_category = std::env::var("WARDER_EBPF_FILE_TRACEPOINT_CATEGORY")
-            .unwrap_or_else(|_| "syscalls".to_string());
-        let tracepoint_name = std::env::var("WARDER_EBPF_FILE_TRACEPOINT_NAME")
-            .unwrap_or_else(|_| "sys_enter_openat".to_string());
-
-        let program: &mut TracePoint = bpf
-            .program_mut(&program_name)
-            .ok_or_else(|| {
-                watch_error(format!(
-                    "eBPF file journal object '{}' does not contain program '{program_name}'",
-                    object_path.display()
-                ))
-            })?
-            .try_into()
-            .map_err(|error| {
-                watch_error(format!(
-                    "eBPF file journal program '{program_name}' is not a tracepoint program: {error}"
-                ))
-            })?;
-        program.load().map_err(|error| {
-            watch_error(format!(
-                "failed to load eBPF file journal tracepoint program '{program_name}': {error}"
-            ))
-        })?;
-        program
-            .attach(&tracepoint_category, &tracepoint_name)
-            .map_err(|error| {
-                watch_error(format!(
-                    "failed to attach eBPF file journal program '{program_name}' to tracepoint '{tracepoint_category}:{tracepoint_name}': {error}"
-                ))
-            })?;
+        if let Ok(program_name) = std::env::var("WARDER_EBPF_FILE_PROGRAM") {
+            let tracepoint_category = std::env::var("WARDER_EBPF_FILE_TRACEPOINT_CATEGORY")
+                .unwrap_or_else(|_| "syscalls".to_string());
+            let tracepoint_name = std::env::var("WARDER_EBPF_FILE_TRACEPOINT_NAME")
+                .unwrap_or_else(|_| "sys_enter_openat".to_string());
+            attach_file_tracepoint(
+                &mut bpf,
+                &object_path,
+                &program_name,
+                &tracepoint_category,
+                &tracepoint_name,
+            )?;
+        } else {
+            for (program_name, tracepoint_name) in default_ebpf_file_tracepoints() {
+                attach_file_tracepoint(
+                    &mut bpf,
+                    &object_path,
+                    program_name,
+                    "syscalls",
+                    tracepoint_name,
+                )?;
+            }
+        }
 
         let map_name =
             std::env::var("WARDER_EBPF_FILE_MAP").unwrap_or_else(|_| "EVENTS".to_string());
@@ -1241,6 +1252,46 @@ impl AyaLiveEbpfFileAccessReader {
         }
         Ok(events)
     }
+}
+
+#[cfg(feature = "live-ebpf")]
+fn attach_file_tracepoint(
+    bpf: &mut aya::Ebpf,
+    object_path: &Path,
+    program_name: &str,
+    tracepoint_category: &str,
+    tracepoint_name: &str,
+) -> Result<(), FileJournalWatchError> {
+    use aya::programs::TracePoint;
+    use std::convert::TryInto;
+
+    let program: &mut TracePoint = bpf
+        .program_mut(program_name)
+        .ok_or_else(|| {
+            watch_error(format!(
+                "eBPF file journal object '{}' does not contain program '{program_name}'",
+                object_path.display()
+            ))
+        })?
+        .try_into()
+        .map_err(|error| {
+            watch_error(format!(
+                "eBPF file journal program '{program_name}' is not a tracepoint program: {error}"
+            ))
+        })?;
+    program.load().map_err(|error| {
+        watch_error(format!(
+            "failed to load eBPF file journal tracepoint program '{program_name}': {error}"
+        ))
+    })?;
+    program
+        .attach(tracepoint_category, tracepoint_name)
+        .map_err(|error| {
+            watch_error(format!(
+                "failed to attach eBPF file journal program '{program_name}' to tracepoint '{tracepoint_category}:{tracepoint_name}': {error}"
+            ))
+        })?;
+    Ok(())
 }
 
 #[cfg(feature = "live-ebpf")]
