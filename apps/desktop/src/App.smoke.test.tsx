@@ -78,7 +78,8 @@ function installInvokeMock() {
       case "host_readiness_summary":
         return Promise.resolve({
           level: "degraded",
-          summary: "degraded",
+          summary:
+            "host readiness: degraded\nblocked reasons: none\ndegraded reasons:\n- Btrfs snapshots unavailable",
           blocked_reasons: [],
           degraded_reasons: ["Btrfs snapshots unavailable"],
         });
@@ -166,6 +167,11 @@ describe("Warder desktop smoke flow", () => {
         name: "degraded",
       }),
     ).toBeInTheDocument();
+    expect(
+      within(readinessPanel as HTMLElement).getByLabelText(
+        "Warder doctor summary",
+      ),
+    ).toHaveTextContent("Btrfs snapshots unavailable");
     expect(
       screen.getByRole("button", { name: "Run protected session" }),
     ).toBeDisabled();

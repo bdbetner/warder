@@ -53,6 +53,14 @@ export function ReadinessPanel() {
             )}
             <p className="muted">{summaryText}</p>
           </div>
+          {readiness && (
+            <pre
+              className="output readiness-doctor-output"
+              aria-label="Warder doctor summary"
+            >
+              {readiness.summary}
+            </pre>
+          )}
           {readiness && hasReasons ? (
             <div className="readiness-reasons">
               {readiness.blocked_reasons.length > 0 && (

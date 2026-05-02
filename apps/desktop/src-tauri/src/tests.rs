@@ -221,6 +221,41 @@ fn desktop_tauri_config_sets_restrictive_csp() {
 }
 
 #[test]
+fn desktop_frontend_does_not_render_untrusted_html() {
+    let frontend_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../src");
+    let mut checked_files = 0;
+    let entries = std::fs::read_dir(frontend_root).expect("frontend src dir");
+
+    for entry in entries {
+        let path = entry.expect("frontend entry").path();
+        if !matches!(
+            path.extension().and_then(|extension| extension.to_str()),
+            Some("tsx") | Some("ts")
+        ) {
+            continue;
+        }
+
+        checked_files += 1;
+        let source = std::fs::read_to_string(&path).expect("frontend source");
+        assert!(
+            !source.contains("dangerouslySetInnerHTML"),
+            "{} must not bypass React escaping for receipt or config text",
+            path.display()
+        );
+        assert!(
+            !source.contains(".innerHTML"),
+            "{} must not assign raw HTML from receipt or config text",
+            path.display()
+        );
+    }
+
+    assert!(
+        checked_files > 0,
+        "frontend XSS audit did not inspect files"
+    );
+}
+
+#[test]
 fn desktop_tauri_config_rebuilds_cli_before_packaging() {
     let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
     let config = std::fs::read_to_string(config_path).expect("tauri config");

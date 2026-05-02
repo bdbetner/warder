@@ -55,6 +55,12 @@ impl WarderConfig {
             report.warning("eBPF unavailable; network journaling is degraded");
         }
 
+        if !self.network.allowed_destinations.is_empty() {
+            report.warning(
+                "network.allowed_destinations is non-enforcing metadata in this release; Warder journals network activity but does not block destinations",
+            );
+        }
+
         let mut writable_roots = HashSet::new();
         for path in &self.enforcement.writable_roots {
             validate_writable_root_path(&mut report, path);
@@ -107,6 +113,13 @@ impl WarderConfig {
             {
                 report.warning(format!(
                     "snapshot backend unavailable for protected zone '{}'; session will be unsnapshotted",
+                    zone.id
+                ));
+            }
+
+            if zone.write_policy == WritePolicy::Allow {
+                report.warning(format!(
+                    "protected zone '{}' has write_policy = \"allow\"; Warder will not deny writes to this zone",
                     zone.id
                 ));
             }
@@ -786,6 +799,67 @@ agents:
             .iter()
             .any(|issue| issue.severity == ConfigIssueSeverity::Warning
                 && issue.message.contains("eBPF")));
+    }
+
+    #[test]
+    fn warns_about_non_enforcing_network_allowlists() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [network]
+                journal = true
+                allowed-destinations = ["api.example.com:443"]
+
+                [[zones]]
+                id = "notes"
+                name = "Notes"
+                paths = ["/home/user/notes"]
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
+        assert!(!report.has_errors());
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.severity == ConfigIssueSeverity::Warning
+                && issue
+                    .message
+                    .contains("network.allowed_destinations is non-enforcing")));
+    }
+
+    #[test]
+    fn warns_about_observation_only_write_allowed_zones() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [[zones]]
+                id = "workspace"
+                name = "Workspace"
+                paths = ["/home/user/project"]
+                write-policy = "allow"
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
+        assert!(!report.has_errors());
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.severity == ConfigIssueSeverity::Warning
+                && issue.message.contains("will not deny writes to this zone")));
     }
 
     #[test]
