@@ -6,7 +6,7 @@ Warder journals are visibility records, not enforcement evidence. Landlock is th
 
 | Kernel family | Expected behavior | Notes |
 | --- | --- | --- |
-| 5.15 LTS | Core tracepoints used by Warder are expected to exist on mainstream distro kernels; attach can still fail if BPF, bpffs, or capabilities are unavailable. | `warder doctor` reports eBPF attach availability and the configured file/network tracepoint counts. |
+| 5.15 LTS | Core tracepoints used by Warder are expected to exist on mainstream distro kernels; attach can still fail if BPF, bpffs, or capabilities are unavailable. | `warder doctor` reports an eBPF tracepoint status table. Hooks show `attach-planned` when live attach is available and `degraded` when the hook family cannot attach. |
 | 6.x | Preferred validation target for the expanded fd-write, mmap, sendfile, splice, and cgroup-id fields. | Newer distro kernels are still visibility-only; failed tracepoint attach must be treated as degraded coverage. |
 | Older or restricted kernels | Degraded or unavailable eBPF journals are expected. | Landlock/write enforcement and inotify may still work independently. |
 

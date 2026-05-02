@@ -16,7 +16,7 @@ Warder treats agent processes as untrusted. The core boundary is not a cooperati
 
 ## What Warder Cannot Promise
 
-- It cannot supervise commands that were not launched through Warder.
+- It cannot supervise commands that were not launched through `warder run` or the Warder desktop launcher. Direct launches or processes started by malware are completely unsupervised.
 - It cannot make unsupported kernels or filesystems enforce features they do not support.
 - It cannot provide tamper-proof local forensics.
 - It cannot prove that quiet logs mean nothing happened.
@@ -37,7 +37,7 @@ Session ids are random local receipt identifiers, not secrets or authentication 
 
 Landlock is the preferred mechanism for preventing writes to protected paths. Path checks canonicalize where possible and reject traversal or unsafe overlaps in config, policy, snapshot, and enforcement planning paths. Missing paths and symlinks are handled deliberately so receipts can describe what was actually enforced or degraded.
 
-`read_policy = "deny"` is available as an explicit experimental policy. It requires `enforcement.readable_roots` and rejects readable roots that overlap read-denied protected paths. Landlock is allowlist-based, so read blocking is not a subtractive "hide this one folder from everything" rule. A bad readable-root allowlist can block agent dependencies or accidentally re-allow a protected path, so Warder fails config validation on contradictory read/write policy and overlapping readable roots.
+`read_deny = true` or `read_policy = "deny"` is available as an explicit experimental policy. It requires `enforcement.readable_roots` and rejects readable roots that overlap read-denied protected paths. Warder also rejects parent/child protected-zone overlaps when read denial is active. Landlock is allowlist-based, so read blocking is not a subtractive "hide this one folder from everything" rule. A bad readable-root allowlist can block agent dependencies or accidentally re-allow a protected path, so Warder fails config validation on contradictory read/write policy and overlapping readable roots.
 
 Best-effort launches may continue with degraded protection only after the caller passes `warder run --accept-degraded`. Without that acknowledgement, Warder refuses to spawn the command when pre-launch checks find degraded coverage. Strict launches with `warder run --require-enforcement` refuse to start when any required protected write blocking is not active or when `--receipt-key <path>` is missing/unreadable.
 

@@ -1,10 +1,10 @@
 # Roadmap
 
-Warder is currently an alpha Linux safety tool for local agent sessions. The CLI, receipt model, protected zones, desktop app, release artifacts, and core Linux enforcement path exist. The `v0.1.0-alpha.11` release is ready for reviewer feedback; future work should make those paths easier to trust before expanding into broader agent-security features.
+Warder is currently a Linux supervised-session safety tool for local agent sessions launched through Warder. The CLI, receipt model, protected zones, desktop app, release artifacts, pre-exec cgroup tagging, seccomp escape-syscall filter, Landlock write denial, experimental read denial, and expanded journals exist. The next release should be a public beta, not a claim of always-on global sandboxing.
 
 ## Current Reviewer Feedback Focus
 
-- Keep release docs, reviewer guide, and package smoke tests aligned with `v0.1.0-alpha.11`.
+- Keep release docs, reviewer guide, and package smoke tests aligned with the next public beta tag.
 - Collect reviewer feedback through the GitHub issue templates and turn accepted findings into focused tasks.
 - Keep README, install, release, and security docs aligned with the real implementation before each alpha tag.
 - Keep receipt, dry-run, and GUI output impossible to confuse with stronger enforcement than Warder currently provides.
@@ -19,12 +19,12 @@ These review-driven items are implemented and should remain protected by tests:
 - Harden local SQLite state with restrictive permissions, WAL/busy-timeout behavior, and safer migration identifier handling.
 - Use random session ids for local receipt/session identifiers.
 - Unify path canonicalization and traversal handling across config validation, policy decisions, and Landlock enforcement planning.
-- Report the cgroup spawn/tag attribution race when journal coverage may be incomplete.
+- Keep pre-exec cgroup tagging covered for Warder-launched sessions.
 - Warn clearly when `network.allowed_destinations` is configured, because destination policy is not enforced in the current alpha.
 - Use stable user-scoped XDG state paths by default instead of per-working-directory `.warder` paths.
 - Cover symlink/traversal paths, snapshot restore inputs, concurrent DB access, degraded hosts, and journal blind spots with focused tests.
 
-Remaining hardening should focus on true pre-spawn cgroup placement, broader live-journal coverage on privileged hosts, public-key or external receipt attestation, and optional seccomp/capability-bounded execution.
+Remaining hardening should focus on global always-on supervision design, broader live-journal compatibility evidence on privileged hosts, public-key receipt transparency, and capability-bounded execution beyond the current seccomp filter.
 
 ## Next Product Improvements
 
@@ -38,7 +38,7 @@ Remaining hardening should focus on true pre-spawn cgroup placement, broader liv
 ## Enforcement And Observability
 
 - Keep Landlock write denial the primary local enforcement story.
-- Harden cgroup tagging and process-tree attribution.
+- Keep pre-exec cgroup tagging and process-tree attribution covered by tests.
 - Expand eBPF file and network journal validation on privileged hosts.
 - Keep network journaling framed as visibility, not complete network control.
 - Treat `network.allowed_destinations` as non-enforcing until a blocking implementation exists.
@@ -54,8 +54,8 @@ These features fit Warder only if they strengthen supervised local execution, po
 - MCP and external-tool inventory for supervised sessions.
 - Optional daemon-backed observation for long-running workflows.
 - Destination-aware network policy after live egress logging is reliable enough.
-- Public-key receipt signing or external receipt attestations after local HMAC signing remains stable.
-- Seccomp/capability-bound execution after the current Landlock/cgroup invariants are tested.
+- Public-key receipt transparency after local HMAC/external-key signing remains stable.
+- Capability-bound execution after the current Landlock/cgroup/seccomp invariants are tested.
 
 ## Non-Goals
 

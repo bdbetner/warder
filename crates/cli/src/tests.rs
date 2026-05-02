@@ -562,6 +562,10 @@ fn render_host_doctor_adds_proc_and_cgroup_diagnostics() {
     assert!(rendered.contains("proc network visibility: ok"));
     assert!(rendered.contains("proc process metadata: ok"));
     assert!(rendered.contains("cgroup launch tagging: ok"));
+    assert!(rendered.contains("supervision scope: Warder only supervises processes"));
+    assert!(rendered.contains("eBPF tracepoint status:"));
+    assert!(rendered.contains("file sys_enter_openat:"));
+    assert!(rendered.contains("network sys_enter_connect:"));
 }
 
 #[test]
@@ -617,6 +621,7 @@ fn render_host_doctor_with_config_checks_agent_command_resolution() {
             id = "notes"
             name = "Notes"
             paths = ["/tmp/warder-notes"]
+            read-deny = true
             snapshot = "disabled"
 
             [[agents]]
@@ -646,6 +651,7 @@ fn render_host_doctor_with_config_checks_agent_command_resolution() {
 
     assert!(rendered.contains("agent command shell: ok"));
     assert!(rendered.contains("agent command missing: warning"));
+    assert!(rendered.contains("experimental read denial: warning"));
     assert!(rendered.contains("definitely-missing-warder-command"));
 }
 
@@ -2709,8 +2715,10 @@ fn render_pre_launch_readiness_for_run_reports_launch_decision() {
     assert!(readiness.contains("--cgroup-root"));
     assert!(readiness.contains("eBPF file journaling unavailable"));
     assert!(readiness.contains("launch visibility limits:"));
+    assert!(readiness.contains("Warder only supervises processes launched via"));
     assert!(readiness.contains("fd-write and mmap eBPF observations"));
     assert!(readiness.contains("connected-socket writes"));
+    assert!(readiness.contains("eBPF tracepoint status:"));
     assert!(readiness.contains("launch decision: refused unless --accept-degraded"));
 
     let mut accepted_command = command.clone();
@@ -3406,7 +3414,8 @@ fn render_session_receipt_summarizes_enforcement_state() {
     assert!(receipt.contains("degraded reasons:"));
     assert!(receipt.contains("Landlock unavailable"));
     assert!(receipt.contains("receipt limitations:"));
-    assert!(receipt.contains("commands run directly outside Warder are not contained"));
+    assert!(receipt
+        .contains("Direct launches or processes started by malware are completely unsupervised"));
     assert!(receipt.contains("Protected-path reads are not blocked by default"));
     assert!(
         receipt.contains("limited to inotify protected-path changes plus live eBPF observations")
@@ -3649,7 +3658,7 @@ fn render_session_receipt_json_is_structured() {
         .any(|limitation| limitation
             .as_str()
             .unwrap()
-            .contains("commands run directly outside Warder")));
+            .contains("Direct launches or processes started by malware")));
     assert!(parsed["limitations"]
         .as_array()
         .unwrap()

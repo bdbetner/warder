@@ -8,15 +8,15 @@ Warder should be published as an alpha Linux supervised-session tool, not as bro
 
 Defensible v1 promise:
 
-> Warder supervises commands launched through Warder, can deny protected writes with Linux Landlock where available, can optionally apply experimental read-denial policies with an explicit readable-root allowlist, and records receipts that explain active and degraded coverage.
+> Warder supervises commands launched through `warder run` or the desktop launcher, can deny protected writes with Linux Landlock where available, can optionally apply experimental read-denial policies with an explicit readable-root allowlist, and records receipts that explain active and degraded coverage.
 
 Do not claim:
 
-- read blocking by default or without explicit `read_policy = "deny"` plus disjoint `enforcement.readable_roots`;
+- read blocking by default or without explicit `read_deny = true` or `read_policy = "deny"` plus disjoint `enforcement.readable_roots`;
 - destination-aware network blocking;
 - receipts that cannot be altered by a local user or malware;
 - complete socket forensics;
-- always-on protection for commands launched outside Warder.
+- always-on protection for commands launched outside Warder; global supervision is planned for v1.1.
 
 ## Product Decisions
 

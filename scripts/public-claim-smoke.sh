@@ -31,7 +31,7 @@ reject_text() {
   fi
 }
 
-require_text "$ROOT_DIR/README.md" "Warder only supervises commands launched through Warder."
+require_text "$ROOT_DIR/README.md" "Warder only supervises processes launched via \`warder run\` or the desktop launcher."
 require_text "$ROOT_DIR/README.md" "Current network journaling is visibility, not complete network enforcement."
 require_text "$ROOT_DIR/README.md" "not tamper-proof forensics"
 require_text "$ROOT_DIR/docs/security-model.md" "It cannot enforce \`network.allowed_destinations\` yet"

@@ -359,6 +359,10 @@ h3 {
   padding: 12px 14px;
 }
 
+.strong-notice {
+  border-left-color: var(--danger);
+}
+
 .setup-review,
 .stat-grid {
   display: grid;

@@ -42,13 +42,13 @@ Warder is an alpha Linux tool with a working CLI and native desktop app.
 
 The CLI can initialize config, dry-run a policy, launch a supervised command, persist session receipts, record observed file activity, read back network-journal data, and report degraded enforcement. Landlock write denial, cgroup tagging, inotify file journaling, Btrfs snapshots, guarded Btrfs revert, and optional live eBPF network collection are implemented where the host supports them.
 
-It is not an always-on system guard. Warder only supervises commands launched through Warder.
+It is not an always-on system guard. Warder only supervises processes launched via `warder run` or the desktop launcher. Direct launches or processes started by malware are completely unsupervised.
 
 ## Known Limits
 
-- Warder only supervises processes launched through `warder run`.
+- Warder only supervises processes launched via `warder run` or the desktop launcher. Direct launches or processes started by malware are completely unsupervised.
 - Host support matters: missing Landlock, cgroups, Btrfs, or eBPF permissions can reduce protection.
-- Protected reads are not blocked by default. Experimental Landlock read blocking is available only with explicit `read_policy = "deny"` plus disjoint `enforcement.readable_roots`.
+- Protected reads are not blocked by default. Experimental Landlock read blocking is available only with explicit `read_deny = true` or `read_policy = "deny"` plus disjoint `enforcement.readable_roots`, and it may break some agents.
 - Current network journaling is visibility, not complete network enforcement.
 - Local receipts and journals are useful accountability records, not tamper-proof forensics.
 - Alpha packages are checksummed and attested where available, but they are not package-manager signed.
@@ -155,11 +155,12 @@ Warder does not depend on an agent choosing to behave. The project prefers host 
 
 Important limits:
 
-- Warder only supervises processes launched through `warder run`.
+- Warder only supervises processes launched via `warder run` or the desktop launcher. Direct launches or processes started by malware are completely unsupervised.
 - Unsupported kernels and filesystems reduce enforcement.
 - Current network visibility is limited, not complete socket forensics.
 - Alpha packages are checksummed and attested where available, but they are not package-manager signed.
 - No local safety tool can make arbitrary permissive execution risk-free.
+- Global supervision, meaning an always-on mode for processes not launched through Warder, is planned for v1.1.
 
 Read [Security Model](docs/security-model.md), [Threat Model](THREAT_MODEL.md), and [Permissions](docs/permissions.md) before relying on Warder for sensitive work.
 

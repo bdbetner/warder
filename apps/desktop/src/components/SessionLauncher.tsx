@@ -32,7 +32,9 @@ interface SessionLauncherProps {
   hasProtectedPaths: boolean;
   requireEnforcement: boolean;
   receiptKeyPath: string;
+  showSupervisionScopeBanner: boolean;
   onReceiptKeyPathChange: (value: string) => void;
+  onProtectedLaunchComplete: () => void;
 }
 
 export function SessionLauncher({
@@ -41,7 +43,9 @@ export function SessionLauncher({
   hasProtectedPaths,
   requireEnforcement,
   receiptKeyPath,
+  showSupervisionScopeBanner,
   onReceiptKeyPathChange,
+  onProtectedLaunchComplete,
 }: SessionLauncherProps) {
   const [command, setCommand] = useState(
     () => window.localStorage.getItem(COMMAND_STATE_KEY) ?? "true",
@@ -157,6 +161,7 @@ export function SessionLauncher({
         request,
       });
       setLaunchResult(result);
+      onProtectedLaunchComplete();
       setDryRun("");
     } catch (reason) {
       setError(String(reason));
@@ -173,6 +178,13 @@ export function SessionLauncher({
         Commands run through Warder using the saved setup policy. Review dry-run
         warnings before starting a protected session.
       </p>
+      {showSupervisionScopeBanner && (
+        <p className="notice strong-notice">
+          Warder only supervises processes launched via warder run or this
+          desktop launcher. Direct launches or processes started by malware are
+          completely unsupervised.
+        </p>
+      )}
       {requireEnforcement && (
         <p className="notice">
           Strict launch is enabled. Warder will refuse to start if protected

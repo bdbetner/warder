@@ -210,6 +210,8 @@ describe("Warder desktop smoke flow", () => {
         agentCommand: "codex",
         networkJournal: true,
         requireEnforcement: false,
+        receiptKeyPath: "/run/warder-key",
+        protectedLaunchCount: 3,
         configPath: "/home/alex/project/.warder/gui.toml",
         dbPath: "/home/alex/project/.warder/warder.sqlite3",
         protectedPaths: [
@@ -252,6 +254,39 @@ describe("Warder desktop smoke flow", () => {
     ).toBeDisabled();
     expect(screen.getByRole("button", { name: "Review readiness" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Dry run" })).toBeDisabled();
+    expect(screen.queryByText(/completely unsupervised/)).not.toBeInTheDocument();
+  });
+
+  test("shows global supervision scope banner before the first three launches", async () => {
+    window.localStorage.setItem(
+      "warder.desktop.state.v1",
+      JSON.stringify({
+        setupComplete: true,
+        selectedProfileId: "codex-cli",
+        agentCommand: "codex",
+        networkJournal: true,
+        requireEnforcement: false,
+        receiptKeyPath: "/run/warder-key",
+        protectedLaunchCount: 2,
+        configPath: "/home/alex/project/.warder/gui.toml",
+        dbPath: "/home/alex/project/.warder/warder.sqlite3",
+        protectedPaths: [
+          {
+            ...recommendedProtections[0],
+            selected: true,
+            readProtected: true,
+            writeProtected: true,
+            snapshotProtected: false,
+          },
+        ],
+      }),
+    );
+
+    render(<App />);
+
+    expect(
+      await screen.findByText(/completely unsupervised/),
+    ).toBeInTheDocument();
   });
 
   test("does not save setup without a protected path", async () => {

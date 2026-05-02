@@ -100,6 +100,7 @@ export default function App() {
   const [networkJournal, setNetworkJournal] = useState(false);
   const [requireEnforcement, setRequireEnforcement] = useState(true);
   const [receiptKeyPath, setReceiptKeyPath] = useState(DEFAULT_RECEIPT_KEY_PATH);
+  const [protectedLaunchCount, setProtectedLaunchCount] = useState(0);
   const [configPath, setConfigPath] = useState("");
   const [dbPath, setDbPath] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -153,6 +154,7 @@ export default function App() {
         );
         setRequireEnforcement(persisted?.requireEnforcement ?? true);
         setReceiptKeyPath(persisted?.receiptKeyPath ?? DEFAULT_RECEIPT_KEY_PATH);
+        setProtectedLaunchCount(persisted?.protectedLaunchCount ?? 0);
         setPaths(
           mergePersistedPaths([...selections, ...additions], persisted?.protectedPaths),
         );
@@ -174,6 +176,7 @@ export default function App() {
       networkJournal,
       requireEnforcement,
       receiptKeyPath,
+      protectedLaunchCount,
       configPath,
       dbPath,
       protectedPaths: paths,
@@ -185,6 +188,7 @@ export default function App() {
     loaded,
     networkJournal,
     paths,
+    protectedLaunchCount,
     receiptKeyPath,
     requireEnforcement,
     selectedProfileId,
@@ -329,6 +333,10 @@ export default function App() {
     setSetupOpen(false);
   }
 
+  function recordProtectedLaunch() {
+    setProtectedLaunchCount((current) => current + 1);
+  }
+
   if (error) {
     return (
       <main className="app-shell">
@@ -386,7 +394,9 @@ export default function App() {
               hasProtectedPaths={selectedCount > 0}
               requireEnforcement={requireEnforcement}
               receiptKeyPath={receiptKeyPath}
+              showSupervisionScopeBanner={protectedLaunchCount < 3}
               onReceiptKeyPathChange={setReceiptKeyPath}
+              onProtectedLaunchComplete={recordProtectedLaunch}
             />
             <SessionLogs dbPath={dbPath} />
           </div>

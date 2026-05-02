@@ -2,6 +2,8 @@
 
 Warder receipts are accountability records for Warder-launched sessions. They are not tamper-proof forensics, but the local database now carries a hash chain that `warder verify-receipts` checks fail-closed.
 
+Receipt integrity does not expand supervision scope. Warder only supervises processes launched via `warder run` or the desktop launcher; direct launches or processes started by malware are completely unsupervised.
+
 ## Strict Launch Keys
 
 Strict launches require an external receipt key:

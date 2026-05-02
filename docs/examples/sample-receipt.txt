@@ -14,8 +14,8 @@ blocked reasons: none
 degraded reasons:
 - cgroup tagging skipped because --cgroup-root was not provided
 receipt limitations:
-- Warder only supervises commands launched through warder run or the Warder desktop launcher; commands run directly outside Warder are not contained.
-- Protected-path reads are not blocked by default; only explicit read_policy = "deny" zones with valid readable_roots use experimental Landlock read blocking.
+- Warder only supervises processes launched via `warder run` / desktop launcher. Direct launches or processes started by malware are completely unsupervised.
+- Protected-path reads are not blocked by default; only explicit read_deny = true or read_policy = "deny" zones with valid readable_roots use experimental Landlock read blocking. Read denial may break some agents.
 - limited to inotify protected-path changes plus live eBPF observations of common path syscalls, fd writes, ftruncate(2), writable mmap(2)/mprotect(2), sendfile(2), splice(2), and copy_file_range(2) when attached; fd and mmap observations may not resolve back to protected paths and remain visibility-only, not enforcement
 - limited to observed TCP connect(2), UDP sendto(2)/sendmsg(2)/sendmmsg(2), socket send(2), and socket-like sendfile(2)/splice(2) fd activity when live eBPF network journaling is attached, plus connected socket snapshots from procfs during supervised runs; not complete socket forensics or enforcement
 - Network policy is visibility-only in this alpha; allowed destinations are not enforced and quiet network journals are not proof of no egress.

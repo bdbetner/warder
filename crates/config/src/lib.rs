@@ -133,14 +133,14 @@ impl WarderConfig {
                     zone.id
                 ));
             }
-            if zone.read_policy == ReadPolicy::Deny {
+            if zone.effective_read_policy() == ReadPolicy::Deny {
                 report.warning(format!(
-                    "protected zone '{}' has read_policy = \"deny\"; this is an explicit experimental read-blocking policy and may block agent dependencies unless readable_roots is complete",
+                    "protected zone '{}' has read denial enabled; this is an explicit experimental read-blocking policy and may block agent dependencies unless readable_roots is complete",
                     zone.id
                 ));
                 if zone.write_policy == WritePolicy::Allow {
                     report.error(format!(
-                        "protected zone '{}' cannot combine read_policy = \"deny\" with write_policy = \"allow\"",
+                        "protected zone '{}' cannot combine read denial with write_policy = \"allow\"",
                         zone.id
                     ));
                 }
@@ -150,6 +150,11 @@ impl WarderConfig {
         for left in 0..self.zones.len() {
             for right in (left + 1)..self.zones.len() {
                 warn_if_zones_overlap(&mut report, &self.zones[left], &self.zones[right]);
+                reject_read_deny_parent_child_overlap(
+                    &mut report,
+                    &self.zones[left],
+                    &self.zones[right],
+                );
             }
         }
         validate_writable_roots_against_zones(
@@ -231,8 +236,20 @@ pub struct ProtectedZoneConfig {
     pub write_policy: WritePolicy,
     #[serde(default = "default_read_policy", alias = "read_policy")]
     pub read_policy: ReadPolicy,
+    #[serde(default, alias = "read_deny")]
+    pub read_deny: bool,
     #[serde(default = "default_snapshot_policy")]
     pub snapshot: SnapshotPolicy,
+}
+
+impl ProtectedZoneConfig {
+    pub fn effective_read_policy(&self) -> ReadPolicy {
+        if self.read_deny {
+            ReadPolicy::Deny
+        } else {
+            self.read_policy
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize)]
@@ -454,6 +471,37 @@ fn warn_if_zones_overlap(
     }
 }
 
+fn reject_read_deny_parent_child_overlap(
+    report: &mut ConfigValidationReport,
+    left: &ProtectedZoneConfig,
+    right: &ProtectedZoneConfig,
+) {
+    let left_read_deny = left.effective_read_policy() == ReadPolicy::Deny;
+    let right_read_deny = right.effective_read_policy() == ReadPolicy::Deny;
+    if !left_read_deny && !right_read_deny {
+        return;
+    }
+
+    for left_path in &left.paths {
+        for right_path in &right.paths {
+            if !left_path.is_absolute() || !right_path.is_absolute() || left_path == right_path {
+                continue;
+            }
+
+            if left_path.starts_with(right_path) || right_path.starts_with(left_path) {
+                report.error(format!(
+                    "read-denied protected zones '{}' and '{}' must not use parent/child paths ('{}' and '{}')",
+                    left.id,
+                    right.id,
+                    left_path.display(),
+                    right_path.display()
+                ));
+                return;
+            }
+        }
+    }
+}
+
 fn validate_writable_roots_against_zones(
     report: &mut ConfigValidationReport,
     landlock: EnforcementRequirement,
@@ -517,10 +565,10 @@ fn validate_readable_roots_against_zones(
 
     let has_read_denied_zone = zones
         .iter()
-        .any(|zone| zone.read_policy == ReadPolicy::Deny);
+        .any(|zone| zone.effective_read_policy() == ReadPolicy::Deny);
     if has_read_denied_zone && readable_roots.is_empty() {
         report.error(
-            "read_policy = \"deny\" requires at least one explicit enforcement.readable_roots entry"
+            "read denial requires at least one explicit enforcement.readable_roots entry"
                 .to_string(),
         );
     }
@@ -530,7 +578,7 @@ fn validate_readable_roots_against_zones(
             continue;
         }
         for zone in zones {
-            if zone.read_policy != ReadPolicy::Deny {
+            if zone.effective_read_policy() != ReadPolicy::Deny {
                 continue;
             }
             for zone_path in &zone.paths {
@@ -1170,6 +1218,74 @@ agents:
         assert!(report.issues.iter().any(|issue| issue
             .message
             .contains("Landlock readable root '/home/alex' must not overlap read-denied")));
+    }
+
+    #[test]
+    fn read_deny_boolean_enables_experimental_read_blocking() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [enforcement]
+                readable-roots = ["/usr", "/bin"]
+                writable-roots = ["/tmp"]
+
+                [[zones]]
+                id = "ssh"
+                name = "SSH"
+                paths = ["/home/alex/.ssh"]
+                read-deny = true
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config.zones[0].effective_read_policy(), ReadPolicy::Deny);
+        let report = config.validate(&supported_environment());
+
+        assert!(!report.has_errors());
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.message.contains("read denial enabled")));
+    }
+
+    #[test]
+    fn rejects_parent_child_zone_overlap_when_read_deny_is_enabled() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [enforcement]
+                readable-roots = ["/usr", "/bin"]
+                writable-roots = ["/tmp"]
+
+                [[zones]]
+                id = "home"
+                name = "Home"
+                paths = ["/home/alex"]
+                read-deny = true
+
+                [[zones]]
+                id = "ssh"
+                name = "SSH"
+                paths = ["/home/alex/.ssh"]
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
+        assert!(report.has_errors());
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.message.contains("must not use parent/child paths")));
     }
 
     #[test]

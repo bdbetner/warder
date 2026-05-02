@@ -26,6 +26,7 @@ export interface AppPolicyState {
   networkJournal: boolean;
   requireEnforcement: boolean;
   receiptKeyPath: string;
+  protectedLaunchCount: number;
   configPath: string;
   dbPath: string;
   protectedPaths: ProtectedPathSelection[];

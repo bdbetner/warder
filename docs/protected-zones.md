@@ -33,7 +33,7 @@ Start with a small number of high-value zones. Protect credentials first, then p
 
 Keep readonly zones separate from workspaces where agents are expected to edit. That makes receipts easier to read and reduces accidental overlap between protected paths and writable roots.
 
-Read blocking is opt-in and stricter than write blocking. If a zone uses `read_policy = "deny"`, define `enforcement.readable_roots` as the exact directories the agent must still read, and keep those roots disjoint from the read-denied zone. Warder rejects overlapping readable roots because Landlock allow rules are additive.
+Read blocking is opt-in and stricter than write blocking. If a zone uses `read_deny = true` or `read_policy = "deny"`, define `enforcement.readable_roots` as the exact directories the agent must still read, and keep those roots disjoint from the read-denied zone. Warder rejects overlapping readable roots and parent/child protected-zone overlaps when read denial is active because Landlock allow rules are additive. Read denial is experimental and may break agents that need runtime, shell, model, or dependency files outside the readable-root allowlist.
 
 Use `warder explain` before the first real run:
 
@@ -62,6 +62,9 @@ writable_roots = ["/tmp"]
 id = "credentials"
 paths = ["/home/alex/.ssh", "/home/alex/.aws"]
 write_policy = "deny"
+# Experimental. Requires enforcement.readable_roots to include every path the
+# agent must still read, and may break some agents.
+read_deny = false
 snapshot = "disabled"
 
 [[zones]]
