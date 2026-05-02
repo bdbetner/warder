@@ -413,13 +413,16 @@ pub fn load_snapshot_manifest(
             manifest_path.display()
         ),
     })?;
-    serde_json::from_str(&json).map_err(|error| SnapshotError {
-        message: format!(
-            "snapshot manifest unavailable for snapshot '{}': failed to parse '{}': {error}",
-            snapshot_id,
-            manifest_path.display()
-        ),
-    })
+    let manifest: SnapshotManifest =
+        serde_json::from_str(&json).map_err(|error| SnapshotError {
+            message: format!(
+                "snapshot manifest unavailable for snapshot '{}': failed to parse '{}': {error}",
+                snapshot_id,
+                manifest_path.display()
+            ),
+        })?;
+    validate_snapshot_manifest(snapshot_id, &manifest)?;
+    Ok(manifest)
 }
 
 pub fn validate_snapshot_id(snapshot_id: &str) -> Result<(), SnapshotError> {
@@ -435,6 +438,59 @@ pub fn validate_snapshot_id(snapshot_id: &str) -> Result<(), SnapshotError> {
         return Err(SnapshotError {
             message: format!(
                 "invalid snapshot id '{snapshot_id}': only ASCII letters, digits, '-' and '_' are allowed"
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn validate_snapshot_manifest(
+    requested_snapshot_id: &str,
+    manifest: &SnapshotManifest,
+) -> Result<(), SnapshotError> {
+    if manifest.snapshot_id != requested_snapshot_id {
+        return Err(SnapshotError {
+            message: format!(
+                "snapshot manifest invalid for snapshot '{}': manifest declares snapshot id '{}'",
+                requested_snapshot_id, manifest.snapshot_id
+            ),
+        });
+    }
+
+    for entry in &manifest.entries {
+        validate_manifest_path(requested_snapshot_id, "source_root", &entry.source_root)?;
+        validate_manifest_path(requested_snapshot_id, "snapshot_path", &entry.snapshot_path)?;
+    }
+    Ok(())
+}
+
+fn validate_manifest_path(
+    requested_snapshot_id: &str,
+    field: &'static str,
+    value: &str,
+) -> Result<(), SnapshotError> {
+    if value.as_bytes().contains(&0) {
+        return Err(SnapshotError {
+            message: format!(
+                "snapshot manifest invalid for snapshot '{requested_snapshot_id}': {field} must not contain NUL bytes"
+            ),
+        });
+    }
+    let path = Path::new(value);
+    if !path.is_absolute() {
+        return Err(SnapshotError {
+            message: format!(
+                "snapshot manifest invalid for snapshot '{requested_snapshot_id}': {field} '{value}' must be absolute"
+            ),
+        });
+    }
+    if path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(SnapshotError {
+            message: format!(
+                "snapshot manifest invalid for snapshot '{requested_snapshot_id}': {field} '{value}' must not contain parent traversal"
             ),
         });
     }
@@ -711,6 +767,92 @@ mod tests {
 
         assert!(error.message.contains("snapshot manifest unavailable"));
         assert!(error.message.contains("missing"));
+    }
+
+    #[test]
+    fn load_snapshot_manifest_rejects_mismatched_manifest_id() {
+        let snapshot_root = temp_snapshot_root("mismatched-manifest-id");
+        let snapshot_dir = snapshot_root.join("snap-1");
+        let snapshot_path = snapshot_dir.join("project");
+        let source_root = snapshot_root.join("restore").join("project");
+        std::fs::create_dir_all(&snapshot_path).unwrap();
+        std::fs::create_dir_all(source_root.parent().unwrap()).unwrap();
+        std::fs::write(
+            snapshot_dir.join("manifest.json"),
+            format!(
+                r#"{{"snapshot_id":"snap-2","backend":"btrfs","entries":[{{"source_root":"{}","snapshot_path":"{}"}}]}}"#,
+                source_root.display(),
+                snapshot_path.display()
+            ),
+        )
+        .unwrap();
+
+        let error = load_snapshot_manifest(&snapshot_root, "snap-1").unwrap_err();
+
+        assert!(error
+            .message
+            .contains("manifest declares snapshot id 'snap-2'"));
+    }
+
+    #[test]
+    fn load_snapshot_manifest_rejects_relative_or_traversing_entries() {
+        for (name, source_root, snapshot_path, expected) in [
+            (
+                "relative-source",
+                "restore/project",
+                "/tmp/snapshot/project",
+                "source_root 'restore/project' must be absolute",
+            ),
+            (
+                "relative-snapshot",
+                "/tmp/restore/project",
+                "snapshots/project",
+                "snapshot_path 'snapshots/project' must be absolute",
+            ),
+            (
+                "traversing-source",
+                "/tmp/restore/../project",
+                "/tmp/snapshot/project",
+                "source_root '/tmp/restore/../project' must not contain parent traversal",
+            ),
+            (
+                "traversing-snapshot",
+                "/tmp/restore/project",
+                "/tmp/snapshot/../project",
+                "snapshot_path '/tmp/snapshot/../project' must not contain parent traversal",
+            ),
+            (
+                "nul-source",
+                "/tmp/restore/\\u0000project",
+                "/tmp/snapshot/project",
+                "source_root must not contain NUL bytes",
+            ),
+            (
+                "nul-snapshot",
+                "/tmp/restore/project",
+                "/tmp/snapshot/\\u0000project",
+                "snapshot_path must not contain NUL bytes",
+            ),
+        ] {
+            let snapshot_root = temp_snapshot_root(name);
+            let snapshot_dir = snapshot_root.join("snap-1");
+            std::fs::create_dir_all(&snapshot_dir).unwrap();
+            std::fs::write(
+                snapshot_dir.join("manifest.json"),
+                format!(
+                    r#"{{"snapshot_id":"snap-1","backend":"btrfs","entries":[{{"source_root":"{source_root}","snapshot_path":"{snapshot_path}"}}]}}"#
+                ),
+            )
+            .unwrap();
+
+            let error = load_snapshot_manifest(&snapshot_root, "snap-1").unwrap_err();
+
+            assert!(
+                error.message.contains(expected),
+                "expected {expected:?}, got {:?}",
+                error.message
+            );
+        }
     }
 
     #[test]

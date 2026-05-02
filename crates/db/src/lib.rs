@@ -473,7 +473,17 @@ impl WarderDb {
         let mut issues = Vec::new();
         let mut previous_hash = genesis_integrity_hash();
         let mut latest_payload_by_session = std::collections::BTreeMap::<String, String>::new();
+        let session_ids = sessions
+            .iter()
+            .map(|session| session.id.clone())
+            .collect::<std::collections::BTreeSet<_>>();
         for row in &rows {
+            if !session_ids.contains(&row.session_id) {
+                issues.push(ReceiptIntegrityIssue {
+                    session_id: Some(row.session_id.clone()),
+                    message: "integrity log references a missing session record".to_string(),
+                });
+            }
             if row.previous_hash != previous_hash {
                 issues.push(ReceiptIntegrityIssue {
                     session_id: Some(row.session_id.clone()),

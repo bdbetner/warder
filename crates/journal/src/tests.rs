@@ -1435,3 +1435,53 @@ fn inotify_watcher_observes_file_in_directory_created_after_watch_start() {
             && event.attribution == JournalAttribution::SessionWindow
     }));
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn inotify_watcher_snapshots_fast_nested_dynamic_directory_without_following_symlinks() {
+    let root = unique_test_dir("warder-journal-inotify-fast-dynamic");
+    let outside = unique_test_dir("warder-journal-inotify-fast-dynamic-outside");
+    let dynamic = root.join("new-workspace");
+    let nested = dynamic.join("crate-a").join("src");
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&outside);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    let mut watcher = InotifyFileJournalWatcher::watch_zones(&[ProtectedJournalZone {
+        id: "notes".to_string(),
+        root_paths: vec![root.clone()],
+    }])
+    .unwrap();
+
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("todo.md"), "hello").unwrap();
+    std::os::unix::fs::symlink(&outside, dynamic.join("outside-link")).unwrap();
+    std::fs::write(dynamic.join("outside-link").join("secret.txt"), "outside").unwrap();
+
+    let mut events = Vec::new();
+    for _ in 0..20 {
+        events.extend(watcher.read_available_events("session-1", None).unwrap());
+        if events
+            .iter()
+            .any(|event| event.path == nested.join("todo.md"))
+        {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&outside);
+
+    assert!(events.iter().any(|event| {
+        event.protected_zone_id == Some("notes".to_string())
+            && event.path == nested.join("todo.md")
+            && event.source == JournalSource::Inotify
+            && event.attribution == JournalAttribution::SessionWindow
+    }));
+    assert!(
+        events
+            .iter()
+            .all(|event| event.path != outside.join("secret.txt")),
+        "new-directory snapshot must not follow symlinked directories outside the protected root"
+    );
+}

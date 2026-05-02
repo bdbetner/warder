@@ -412,6 +412,12 @@ fn validate_desktop_command(command: &[String]) -> Result<(), String> {
             "command arguments must be non-empty and at most {MAX_DESKTOP_COMMAND_ARG_BYTES} bytes"
         ));
     }
+    if command
+        .iter()
+        .any(|argument| argument.as_bytes().contains(&0))
+    {
+        return Err("command arguments must not contain NUL bytes".to_string());
+    }
     Ok(())
 }
 

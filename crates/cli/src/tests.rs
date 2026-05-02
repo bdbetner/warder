@@ -4679,6 +4679,44 @@ fn receipt_signing_key_rejects_group_readable_file() {
     let _ = std::fs::remove_file(key_path);
 }
 
+#[cfg(unix)]
+#[test]
+fn receipt_signing_key_rejects_symlinked_key_file() {
+    let key_path = temp_file("warder-cli-receipt-symlink-key", "key");
+    let link_path = temp_file("warder-cli-receipt-symlink-key-link", "key");
+    let _ = std::fs::remove_file(&link_path);
+    std::fs::write(&key_path, b"0123456789abcdef0123456789abcdef").unwrap();
+    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    std::os::unix::fs::symlink(&key_path, &link_path).unwrap();
+
+    let error = read_receipt_signing_key(&link_path).unwrap_err();
+
+    assert!(error.message.contains("must not be a symlink"));
+
+    let _ = std::fs::remove_file(key_path);
+    let _ = std::fs::remove_file(link_path);
+}
+
+#[cfg(unix)]
+#[test]
+fn initialize_receipt_signing_key_refuses_symlink_overwrite_even_with_force() {
+    let target_path = temp_file("warder-cli-receipt-init-symlink-target", "key");
+    let link_path = temp_file("warder-cli-receipt-init-symlink-link", "key");
+    let _ = std::fs::remove_file(&link_path);
+    std::fs::write(&target_path, b"0123456789abcdef0123456789abcdef").unwrap();
+    std::os::unix::fs::symlink(&target_path, &link_path).unwrap();
+
+    let error = initialize_receipt_signing_key(&link_path, true).unwrap_err();
+
+    assert!(error.message.contains("must not be a symlink"));
+
+    let target = std::fs::read(&target_path).unwrap();
+    assert_eq!(target, b"0123456789abcdef0123456789abcdef");
+
+    let _ = std::fs::remove_file(target_path);
+    let _ = std::fs::remove_file(link_path);
+}
+
 #[test]
 fn persist_file_journal_events_records_dropped_event_degraded_reason() {
     let db_path = temp_file("warder-cli-journal-limit-db", "sqlite3");

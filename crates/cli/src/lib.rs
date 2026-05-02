@@ -1634,6 +1634,7 @@ pub fn initialize_receipt_signing_key(
     force: bool,
 ) -> Result<String, CliError> {
     let output = output.as_ref();
+    reject_receipt_key_symlink(output)?;
     if output.exists() && !force {
         return err(format!(
             "receipt signing key '{}' already exists; pass --force to overwrite",
@@ -1693,6 +1694,7 @@ pub fn initialize_receipt_signing_key(
 }
 
 fn validate_receipt_signing_key_file(path: &Path) -> Result<(), CliError> {
+    reject_receipt_key_symlink(path)?;
     let metadata = std::fs::metadata(path).map_err(|error| CliError {
         message: format!(
             "failed to inspect receipt signing key '{}': {error}",
@@ -1717,6 +1719,23 @@ fn validate_receipt_signing_key_file(path: &Path) -> Result<(), CliError> {
         }
     }
     Ok(())
+}
+
+fn reject_receipt_key_symlink(path: &Path) -> Result<(), CliError> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => err(format!(
+            "receipt signing key '{}' must not be a symlink",
+            path.display()
+        )),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(CliError {
+            message: format!(
+                "failed to inspect receipt signing key '{}': {error}",
+                path.display()
+            ),
+        }),
+    }
 }
 
 fn restrict_private_directory(path: &Path) -> Result<(), CliError> {

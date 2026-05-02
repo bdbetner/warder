@@ -175,6 +175,14 @@ fn desktop_commands_reject_traversal_paths_and_oversized_commands() {
     )
     .unwrap_err();
     assert!(error.contains("too many arguments"));
+
+    let error = render_dry_run_text(
+        PathBuf::from("/tmp/warder.toml"),
+        "local-agent".to_string(),
+        vec!["sh".to_string(), "bad\0arg".to_string()],
+    )
+    .unwrap_err();
+    assert!(error.contains("must not contain NUL bytes"));
 }
 
 #[test]

@@ -347,6 +347,42 @@ fn session_integrity_log_fails_closed_when_log_is_missing() {
 }
 
 #[test]
+fn session_integrity_log_detects_deleted_session_records() {
+    let store = store("session-integrity-deleted-session");
+    let session = SessionRecord {
+        id: "session-1".to_string(),
+        agent_id: "agent-1".to_string(),
+        agent_label: "Local Script".to_string(),
+        agent_profile: Some("generic-cli".to_string()),
+        command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+        protected_zone_ids: vec!["zone-1".to_string()],
+        status: SessionStatus::Recorded,
+        exit_code: None,
+        started_at: timestamp(),
+        ended_at: None,
+        root_pid: None,
+        cgroup_path: None,
+        cgroup_status: CgroupStatus::Pending,
+        landlock_status: warder_core::LandlockStatus::Pending,
+        snapshot_status: SnapshotStatus::NotRequested,
+        dependency_file_changes: Vec::new(),
+        degraded_reasons: Vec::new(),
+    };
+    store.create_session(&session).unwrap();
+    store
+        .conn
+        .execute("DELETE FROM sessions WHERE id = ?1", ["session-1"])
+        .unwrap();
+
+    let report = store.verify_receipt_integrity().unwrap();
+
+    assert!(!report.is_valid());
+    assert!(report.issues.iter().any(|issue| issue
+        .message
+        .contains("integrity log references a missing session record")));
+}
+
+#[test]
 fn update_session_rejects_missing_session() {
     let store = store("missing-session-update");
     let session = SessionRecord {
