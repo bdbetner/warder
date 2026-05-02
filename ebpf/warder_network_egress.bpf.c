@@ -2,9 +2,8 @@
 //
 // Minimal Warder network-egress tracepoint program.
 //
-// This starts with connect(2) plus UDP sendto(2)/sendmsg(2)/sendmmsg(2)
-// coverage so the live journal has a small, reviewable kernel surface before
-// broader socket coverage lands.
+// This observes common connect/send and socket-fd transfer surfaces while
+// keeping the kernel-side code deliberately small and reviewable.
 
 #define SEC(NAME) __attribute__((section(NAME), used))
 

@@ -49,6 +49,9 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Check live eBPF Rust feature
+        run: cargo check -p warder-journal --features live-ebpf
+
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 

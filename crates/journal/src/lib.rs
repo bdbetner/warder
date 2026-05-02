@@ -3,9 +3,6 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct JournalPlaceholder;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileJournalEvent {
     pub session_id: String,
     pub timestamp: SystemTime,

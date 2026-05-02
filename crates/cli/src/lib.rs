@@ -2261,6 +2261,9 @@ pub fn prepare_supervised_run(
     cgroup_root: impl Into<PathBuf>,
     root_pid: u32,
 ) -> Result<RunSessionOutcome, CliError> {
+    // Record-only sessions can still attach an already-running launcher PID for
+    // audit context. The hardened `--launch` path below uses pre-exec cgroup
+    // setup instead, so this helper deliberately records a degraded warning.
     let outcome = create_run_session(command, environment, now)?;
     let CliCommand::Run { db, .. } = command else {
         return err("prepare_supervised_run requires a run command");
