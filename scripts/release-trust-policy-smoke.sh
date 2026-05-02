@@ -44,5 +44,6 @@ printf '' > "$fixture_dir/SHA256SUMS"
 
 "$ROOT_DIR/scripts/write-release-notes.sh" v0.1.0-alpha.99 "$fixture_dir" "$notes_file"
 
-require_text "$notes_file" "Package-manager signatures are not included in this alpha release."
+require_text "$notes_file" "Package-manager signatures are not included in this public beta release."
+require_text "$notes_file" "Global always-on supervision, meaning host-wide protection for processes launched outside Warder, is planned for v1.1."
 require_text "$notes_file" "GitHub artifact attestations are available only when the repository supports them."

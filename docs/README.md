@@ -1,6 +1,6 @@
 # Warder Documentation
 
-Warder is an alpha Linux safety tool for supervised local agent sessions. Start with the page that matches what you are trying to do.
+Warder is a Linux supervised-session safety layer for local agent sessions. Start with the page that matches what you are trying to do.
 
 ## Try Warder
 
@@ -17,8 +17,8 @@ Warder is an alpha Linux safety tool for supervised local agent sessions. Start 
 - [Desktop Security](desktop-security.md): Tauri IPC and capability boundaries.
 - [Threat Model](../THREAT_MODEL.md): risks Warder is designed around.
 - [Permissions](permissions.md): how policy choices are framed.
-- [Release Trust Model](release-trust.md): how to verify alpha artifacts.
-- [Release Readiness](release-readiness.md): final alpha release decisions and pull-release criteria.
+- [Release Trust Model](release-trust.md): how to verify release artifacts.
+- [Release Readiness](release-readiness.md): final release decisions and pull-release criteria.
 - [Security Review Triage](security-review-triage.md): current hardening priorities from independent review.
 
 ## Understand The Project
@@ -26,8 +26,8 @@ Warder is an alpha Linux safety tool for supervised local agent sessions. Start 
 - [Vision](vision.md): the long-term product direction.
 - [Product Overview](../PRODUCT_SPEC.md): product goals and non-goals.
 - [Roadmap](../ROADMAP.md): current and future work.
-- [Product Completion Plan](product-completion-plan.md): proposed final alpha shape.
-- [Alpha Scope](../MVP_SCOPE.md): what the current alpha includes and excludes.
+- [Product Completion Plan](product-completion-plan.md): proposed final release shape.
+- [Scope](../MVP_SCOPE.md): what the current release includes and excludes.
 - [Architecture](architecture.md): crate layout and session flow.
 - [Journals](audit-log.md): what receipts and journals can show.
 - [Journal Coverage](journal-coverage.md): exact file/network journal surfaces and blind spots.

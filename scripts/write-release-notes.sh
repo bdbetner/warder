@@ -29,7 +29,8 @@ commit="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
 
 {
   printf '# Warder %s\n\n' "$RELEASE_TAG"
-  printf 'Alpha Linux release for Warder. This release is intended for Linux package validation and early feedback.\n\n'
+  printf 'Public beta Linux release for Warder. Warder v1.0 is a supervised-session safety layer for commands launched through `warder run` or the desktop launcher.\n\n'
+  printf 'Global always-on supervision, meaning host-wide protection for processes launched outside Warder, is planned for v1.1.\n\n'
   printf '## Artifacts\n\n'
   printf -- '- `warder`: source-build CLI binary\n'
   printf -- '- `warder-desktop`: source-build native GUI binary\n'
@@ -53,11 +54,13 @@ commit="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
   printf '## Scope\n\n'
   printf -- '- Complete installer targets: Ubuntu/Debian `.deb` and RPM.\n'
   printf -- '- AppImage is a portable GUI bundle paired with the separate CLI binary.\n'
-  printf -- '- Package-manager signatures are not included in this alpha release.\n'
+  printf -- '- Package-manager signatures are not included in this public beta release.\n'
   printf -- '- GitHub artifact attestations are available only when the repository supports them.\n'
   printf -- '- `warder init` can write starter TOML or print it to stdout with `--print` for preview and shell redirection.\n'
-  printf -- '- Live eBPF file journaling is opt-in and covers common path-based file syscalls, but not already-open file descriptor writes or writable memory maps; live network eBPF collection currently covers TCP `connect(2)` plus UDP `sendto(2)`/`sendmsg(2)`/`sendmmsg(2)` attempts when host privileges allow it, and supervised runs also snapshot connected sockets from procfs for the supervised process tree when readable.\n'
+  printf -- '- Live eBPF file journaling is opt-in and covers common path-based operations, fd writes, truncation, writable mmap/mprotect observations, file-copy surfaces, and cgroup-attributed events when host privileges allow it. Some fd and memory-map observations may remain synthetic labels rather than resolved paths.\n'
+  printf -- '- Live eBPF network journaling covers common connect/send/socket-fd surfaces when host privileges allow it, and supervised runs also snapshot connected sockets from procfs for the supervised process tree when readable.\n'
   printf -- '- Network journaling is accountability evidence, not complete socket forensics or network enforcement.\n'
+  printf -- '- Warder only supervises processes launched via `warder run` or the desktop launcher. Direct launches or processes started by malware are completely unsupervised.\n'
   printf -- '- Warder still reports degraded protection honestly when host kernel support is unavailable or incomplete.\n\n'
   printf 'Commit: `%s`\n' "$commit"
 } > "$OUTPUT_FILE"

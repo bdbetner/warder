@@ -1,10 +1,12 @@
 # Release Readiness
 
-Use this page as the final gate before publishing an alpha release.
+Use this page as the final gate before publishing a public beta release.
 
 ## Release Positioning
 
-Warder should be published as an alpha Linux supervised-session tool, not as broad security tooling.
+Warder should be published as a Linux supervised-session safety layer, not as broad security tooling.
+
+Warder v1.0 is scoped to processes launched through `warder run` or the desktop launcher. Global always-on supervision, meaning host-wide protection for processes launched outside Warder, is planned for v1.1.
 
 Defensible v1 promise:
 

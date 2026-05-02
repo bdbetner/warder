@@ -20,6 +20,17 @@ The first engineering passes focused on defects that were concrete, local, and t
 
 The product-completion pass is now in public-beta preparation. The remaining strategic item is global always-on supervision for processes not launched through Warder; it remains out of scope until a real privileged host service can be designed and tested.
 
+## Resolved Production Items
+
+The final production-hardening pass resolved the concrete items that were previously tracked as blockers for Warder-launched sessions:
+
+- Pre-exec cgroup setup is implemented for Warder-launched sessions; the child setup path joins the session cgroup before `exec`.
+- The supervised seccomp filter blocks namespace and mount escape syscalls for Warder-launched sessions.
+- Experimental Landlock read denial is wired through policy, receipts, doctor output, and semantic validation.
+- Strict launches require an external receipt key, and receipt verification supports the same external-key path.
+- Doctor and pre-launch output render per-hook eBPF tracepoint readiness instead of a single coarse status line.
+- Receipts, pre-launch output, doctor, docs, and the desktop first-launch banner all state that Warder does not supervise direct launches outside `warder run` or the desktop launcher.
+
 ## Accepted Findings
 
 - Snapshot restore path construction must continue to reject unsafe snapshot ids before path joins.
@@ -55,9 +66,12 @@ The product-completion pass is now in public-beta preparation. The remaining str
 
 ## Deferred Or Strategic
 
+- Global always-on supervision or a privileged host service for commands not launched through Warder.
+
+## Future Hardening Candidates
+
 - Full network enforcement.
 - Productionizing experimental read denial beyond the current Landlock allowlist model.
-- Global always-on supervision or a privileged host service for commands not launched through Warder.
 - Capability-bounded execution beyond the current seccomp syscall filter.
 - Independent/public-key receipt transparency beyond the current local HMAC/hash-chain workflow.
 - Daemon IPC and active session coordination.

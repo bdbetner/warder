@@ -7,7 +7,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-111827.svg)](#current-status)
 
-Warder is an alpha Linux supervised-session tool for running local AI agents with protected zones, write-blocking where the host supports it, and readable receipts.
+Warder is a Linux supervised-session safety layer for running local AI agents with protected zones, write-blocking where the host supports it, and readable receipts.
+
+Warder v1.0 is scoped to processes launched through `warder run` or the desktop launcher. Global always-on supervision, meaning host-wide protection for processes launched outside Warder, is planned for v1.1.
 
 It lets you declare protected folders, launch an agent through Warder, and get a receipt that explains what the session was allowed to do, what Warder observed, which protections were active, and where host support was missing.
 
@@ -16,8 +18,8 @@ The first goal is practical: keep permissive local agent workflows fast while ma
 ## Start Here
 
 - New user: read [Quick Start](#quick-start), then [Protected Zones](docs/protected-zones.md).
-- Installing an alpha build: read [Install Notes](docs/install.md) and [Release Trust Model](docs/release-trust.md).
-- Reviewing the alpha: read [Reviewer Feedback Guide](docs/reviewer-feedback.md).
+- Installing a release build: read [Install Notes](docs/install.md) and [Release Trust Model](docs/release-trust.md).
+- Reviewing Warder: read [Reviewer Feedback Guide](docs/reviewer-feedback.md).
 - Evaluating the safety model: read [Security Model](docs/security-model.md) and [Threat Model](THREAT_MODEL.md).
 - Looking for the project direction: read [Product Overview](PRODUCT_SPEC.md), [Vision](docs/vision.md), and [Roadmap](ROADMAP.md).
 - Looking for common scenarios: read [Examples](docs/examples/README.md) and [FAQ](docs/FAQ.md).
@@ -38,7 +40,7 @@ Warder gives you one tool-agnostic place to define that boundary.
 
 ## Current Status
 
-Warder is an alpha Linux tool with a working CLI and native desktop app.
+Warder is a Linux tool with a working CLI and native desktop app.
 
 The CLI can initialize config, dry-run a policy, launch a supervised command, persist session receipts, record observed file activity, read back network-journal data, and report degraded enforcement. Landlock write denial, cgroup tagging, inotify file journaling, Btrfs snapshots, guarded Btrfs revert, and optional live eBPF network collection are implemented where the host supports them.
 
@@ -51,7 +53,7 @@ It is not an always-on system guard. Warder only supervises processes launched v
 - Protected reads are not blocked by default. Experimental Landlock read blocking is available only with explicit `read_deny = true` or `read_policy = "deny"` plus disjoint `enforcement.readable_roots`, and it may break some agents.
 - Current network journaling is visibility, not complete network enforcement.
 - Local receipts and journals are useful accountability records, not tamper-proof forensics.
-- Alpha packages are checksummed and attested where available, but they are not package-manager signed.
+- Release packages are checksummed and attested where available, but they are not package-manager signed.
 
 ## Quick Start
 
@@ -107,7 +109,7 @@ npm ci
 npm run tauri -- dev
 ```
 
-Release builds produce the CLI, GUI binary, `.deb`, RPM, AppImage, `SHA256SUMS`, and `release-manifest.json`. See [Install Notes](docs/install.md) and [Release Trust Model](docs/release-trust.md) before installing alpha packages.
+Release builds produce the CLI, GUI binary, `.deb`, RPM, AppImage, `SHA256SUMS`, and `release-manifest.json`. See [Install Notes](docs/install.md) and [Release Trust Model](docs/release-trust.md) before installing release packages.
 
 ## What Warder Protects
 
@@ -158,7 +160,7 @@ Important limits:
 - Warder only supervises processes launched via `warder run` or the desktop launcher. Direct launches or processes started by malware are completely unsupervised.
 - Unsupported kernels and filesystems reduce enforcement.
 - Current network visibility is limited, not complete socket forensics.
-- Alpha packages are checksummed and attested where available, but they are not package-manager signed.
+- Release packages are checksummed and attested where available, but they are not package-manager signed.
 - No local safety tool can make arbitrary permissive execution risk-free.
 - Global supervision, meaning an always-on mode for processes not launched through Warder, is planned for v1.1.
 
