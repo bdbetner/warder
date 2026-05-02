@@ -10,6 +10,7 @@ function launchRequest(
   configPath: string,
   dbPath: string,
   requireEnforcement: boolean,
+  readinessReviewed: boolean,
 ): LaunchRequest {
   return {
     config_path: configPath,
@@ -18,6 +19,7 @@ function launchRequest(
     command: splitCommand(commandText),
     require_enforcement: requireEnforcement,
     accept_degraded: !requireEnforcement,
+    readiness_reviewed: readinessReviewed,
   };
 }
 
@@ -68,6 +70,7 @@ export function SessionLauncher({
         configPath,
         dbPath,
         requireEnforcement,
+        false,
       );
       const [readiness, cli] = await Promise.all([
         invoke<string>("launch_readiness_text", { request }),
@@ -95,6 +98,7 @@ export function SessionLauncher({
         configPath,
         dbPath,
         requireEnforcement,
+        false,
       );
       const [readiness, output, cli] = await Promise.all([
         invoke<string>("launch_readiness_text", { request }),
@@ -132,6 +136,7 @@ export function SessionLauncher({
         configPath,
         dbPath,
         requireEnforcement,
+        true,
       );
       const readiness = await invoke<string>("launch_readiness_text", {
         request,

@@ -26,6 +26,7 @@ pub struct LaunchRequest {
     pub command: Vec<String>,
     pub require_enforcement: bool,
     pub accept_degraded: bool,
+    pub readiness_reviewed: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -296,6 +297,12 @@ pub fn build_launch_command_args(request: LaunchRequest) -> Result<Vec<String>, 
 
 pub fn launch_session(request: LaunchRequest) -> Result<LaunchSessionResult, String> {
     validate_launch_request(&request)?;
+    if !request.readiness_reviewed {
+        return Err(
+            "launch refused until launch readiness has been reviewed in the desktop app"
+                .to_string(),
+        );
+    }
     let environment = environment_support_from_probe(warder_daemon::probe_current_host());
     let command = launch_request_to_cli_command(request.clone());
     let outcome = launch_supervised_run(&command, &environment, SystemTime::now())

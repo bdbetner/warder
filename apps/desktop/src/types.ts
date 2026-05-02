@@ -83,6 +83,7 @@ export interface LaunchRequest {
   command: string[];
   require_enforcement: boolean;
   accept_degraded: boolean;
+  readiness_reviewed: boolean;
 }
 
 export interface DesktopPaths {

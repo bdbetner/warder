@@ -64,7 +64,7 @@ Check these flows:
 - Setup requires at least one protected path.
 - Custom protected paths can be added, edited, removed, and saved.
 - Dry-run displays policy and degraded coverage before launch.
-- Launch is disabled until launch readiness has been reviewed.
+- Launch is disabled until launch readiness has been reviewed; the Rust launch command also refuses missing review acknowledgement.
 - Strict write-block mode refuses launch on hosts without required enforcement.
 - Best-effort launch completes on a degraded host only after explicit degraded acknowledgement and records honest degraded coverage.
 - Receipt tabs show summary, file activity, network activity, snapshot/recovery, degraded coverage, and raw receipt.

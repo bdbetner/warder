@@ -132,6 +132,7 @@ fn render_launch_readiness_text_reports_gui_launch_decision() {
         agent_id: "local-agent".to_string(),
         require_enforcement: false,
         accept_degraded: true,
+        readiness_reviewed: false,
         command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
     })
     .expect("launch readiness");
@@ -510,11 +511,12 @@ fn launch_session_runs_supervised_command_and_returns_receipt() {
     .expect("config saved");
 
     let result = launch_session(LaunchRequest {
-        config_path,
-        db_path,
+        config_path: config_path.clone(),
+        db_path: db_path.clone(),
         agent_id: "local-agent".to_string(),
         require_enforcement: false,
         accept_degraded: true,
+        readiness_reviewed: true,
         command: vec![
             "sh".to_string(),
             "-c".to_string(),
@@ -528,6 +530,22 @@ fn launch_session_runs_supervised_command_and_returns_receipt() {
     assert_eq!(result.exit_code, Some(0));
 
     let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn launch_session_refuses_without_desktop_readiness_review() {
+    let error = launch_session(LaunchRequest {
+        config_path: PathBuf::from("/tmp/warder/gui.toml"),
+        db_path: PathBuf::from("/tmp/warder/warder.sqlite3"),
+        agent_id: "local-agent".to_string(),
+        require_enforcement: false,
+        accept_degraded: true,
+        readiness_reviewed: false,
+        command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+    })
+    .unwrap_err();
+
+    assert!(error.contains("launch readiness has been reviewed"));
 }
 
 fn session_record(

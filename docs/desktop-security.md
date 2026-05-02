@@ -12,7 +12,7 @@ The Tauri capability file is intentionally narrow:
 - `core:default` only
 - no filesystem, shell, dialog, HTTP, updater, or opener plugin permissions
 
-The frontend calls app-specific Rust commands for setup, dry-run, launch, receipts, journals, recent sessions, profile templates, and host readiness. Those commands validate paths, session ids, agent ids, command length, and argument size before touching files or launching a supervised process.
+The frontend calls app-specific Rust commands for setup, dry-run, launch, receipts, journals, recent sessions, profile templates, and host readiness. Those commands validate paths, session ids, agent ids, command length, and argument size before touching files or launching a supervised process. The launch command also refuses to spawn until the desktop request explicitly records that launch readiness was reviewed; this keeps the mandatory doctor/review step enforced in Rust instead of relying only on disabled frontend buttons.
 
 ## Review Rule
 
