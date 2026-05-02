@@ -45,6 +45,7 @@ run_output="$(
     --config "$CONFIG_PATH" \
     --db "$DB_PATH" \
     --launch \
+    --accept-degraded \
     --agent local-shell \
     -- sh -c "echo hello > $PROTECTED_ROOT/hello.txt"
 )"

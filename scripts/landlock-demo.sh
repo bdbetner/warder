@@ -48,6 +48,7 @@ run_output="$(
     --db "$DB_PATH" \
     --cgroup-root "$CGROUP_ROOT" \
     --launch \
+    --accept-degraded \
     --agent local-shell \
     -- sh -c "printf denied > $PROTECTED_ROOT/blocked.txt" 2>&1
 )"

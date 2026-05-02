@@ -37,7 +37,7 @@ profile = "codex-cli"
 ```bash
 warder explain --config warder.toml
 warder dry-run --config warder.toml --agent coding-agent -- codex
-warder run --config warder.toml --launch --agent coding-agent -- codex
+warder run --config warder.toml --launch --accept-degraded --agent coding-agent -- codex
 ```
 
 ## Review

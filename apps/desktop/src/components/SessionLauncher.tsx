@@ -17,6 +17,7 @@ function launchRequest(
     agent_id: "local-agent",
     command: splitCommand(commandText),
     require_enforcement: requireEnforcement,
+    accept_degraded: !requireEnforcement,
   };
 }
 
@@ -105,6 +106,12 @@ export function SessionLauncher({
         <p className="notice">
           Strict write-block launch is enabled. Warder will refuse to start if
           protected writes cannot be blocked.
+        </p>
+      )}
+      {!requireEnforcement && (
+        <p className="notice">
+          Best-effort launch is enabled. Warder will pass the explicit degraded
+          acknowledgement required by the CLI.
         </p>
       )}
       {!hasProtectedPaths && (

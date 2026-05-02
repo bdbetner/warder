@@ -20,6 +20,7 @@ fn parses_run_command_after_separator() {
         "/tmp/snapshots",
         "--launch",
         "--require-enforcement",
+        "--accept-degraded",
         "--agent",
         "local",
         "--",
@@ -38,6 +39,7 @@ fn parses_run_command_after_separator() {
             snapshot_root: Some(PathBuf::from("/tmp/snapshots")),
             launch: true,
             require_enforcement: true,
+            accept_degraded: true,
 
             agent: "local".to_string(),
             command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
@@ -413,7 +415,7 @@ fn usage_centers_no_daemon_run_workflow() {
     let usage = usage();
 
     assert!(usage.contains(
-            "primary: warder run --config <path> --launch --agent <id> [--require-enforcement] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>"
+            "primary: warder run --config <path> --launch --agent <id> [--require-enforcement] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>"
         ));
     assert!(
         usage.contains("record only: warder run --config <path> --agent <id> -- <agent command>")
@@ -972,6 +974,7 @@ fn run_command_summary_distinguishes_launch_from_record_only() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
@@ -983,6 +986,7 @@ fn run_command_summary_distinguishes_launch_from_record_only() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
@@ -998,6 +1002,7 @@ fn run_command_summary_distinguishes_launch_from_record_only() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec![
@@ -1742,6 +1747,7 @@ fn create_run_session_loads_config_and_persists_pending_session() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
@@ -1817,6 +1823,7 @@ fn create_run_session_persists_allowed_destination_non_enforcement_warning() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
@@ -1853,6 +1860,7 @@ fn create_run_session_rejects_required_snapshot_without_snapshot_root() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -1892,6 +1900,7 @@ fn create_run_session_rejects_required_overlayfs_snapshot_driver() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -1931,6 +1940,7 @@ fn create_run_session_marks_best_effort_snapshot_failed_without_snapshot_root() 
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -2066,6 +2076,7 @@ fn create_run_session_infers_known_agent_profile_when_not_declared() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "codex".to_string(),
         command: vec!["codex".to_string()],
@@ -2110,6 +2121,7 @@ fn create_run_session_marks_disabled_cgroups_not_requested() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -2151,6 +2163,7 @@ fn create_run_session_rejects_invalid_config_without_persisting() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -2202,6 +2215,7 @@ fn create_run_session_marks_best_effort_snapshot_unrequested_without_backend() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -2245,6 +2259,7 @@ fn apply_cgroup_tag_result_updates_session_as_tagged() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -2281,6 +2296,7 @@ fn apply_cgroup_tag_result_records_unsupported_as_degraded_reason() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -2348,6 +2364,7 @@ fn prepare_supervised_run_records_session_and_applies_cgroup_tag() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -2392,6 +2409,7 @@ fn launch_supervised_run_spawns_child_tags_pid_and_marks_completed() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 0".to_string()],
@@ -2435,6 +2453,7 @@ fn launch_supervised_run_persists_nonzero_exit_code() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 7".to_string()],
@@ -2464,6 +2483,7 @@ fn launch_supervised_run_blocks_required_cgroups_without_root() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 0".to_string()],
@@ -2493,6 +2513,7 @@ fn launch_supervised_run_degrades_best_effort_cgroups_without_root() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 0".to_string()],
@@ -2519,6 +2540,91 @@ fn launch_supervised_run_degrades_best_effort_cgroups_without_root() {
 }
 
 #[test]
+fn launch_supervised_run_refuses_degraded_launch_without_acknowledgement_before_spawn() {
+    let config_path = temp_file("warder-cli-launch-degraded-refused-config", "toml");
+    let db_path = temp_file("warder-cli-launch-degraded-refused-db", "sqlite3");
+    let protected_root = temp_dir("warder-cli-launch-degraded-refused-zone");
+    let marker_path = temp_file("warder-cli-launch-degraded-refused-marker", "txt");
+    let _ = std::fs::remove_file(&marker_path);
+    std::fs::create_dir_all(&protected_root).unwrap();
+    std::fs::write(
+        &config_path,
+        config_with_zone_root_and_cgroups(&protected_root, "disabled", "best-effort", "disabled"),
+    )
+    .unwrap();
+    let command = CliCommand::Run {
+        config: Some(config_path),
+        db: Some(db_path.clone()),
+        cgroup_root: None,
+        snapshot_root: None,
+        launch: true,
+        require_enforcement: false,
+        accept_degraded: false,
+
+        agent: "local".to_string(),
+        command: vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            format!("printf launched > {}", marker_path.display()),
+        ],
+    };
+
+    let error =
+        launch_supervised_run(&command, &supported_environment(), fixed_time()).unwrap_err();
+
+    assert!(error.message.contains("degraded launch refused"));
+    assert!(error.message.contains("--accept-degraded"));
+    assert!(error.message.contains("--cgroup-root"));
+    assert!(!marker_path.exists());
+    assert!(!db_path.exists());
+}
+
+#[test]
+fn render_pre_launch_readiness_for_run_reports_launch_decision() {
+    let config_path = temp_file("warder-cli-launch-readiness-config", "toml");
+    let protected_root = temp_dir("warder-cli-launch-readiness-zone");
+    std::fs::create_dir_all(&protected_root).unwrap();
+    std::fs::write(
+        &config_path,
+        config_with_zone_root_and_cgroups(&protected_root, "disabled", "best-effort", "disabled"),
+    )
+    .unwrap();
+    let command = CliCommand::Run {
+        config: Some(config_path),
+        db: None,
+        cgroup_root: None,
+        snapshot_root: None,
+        launch: true,
+        require_enforcement: false,
+        accept_degraded: false,
+
+        agent: "local".to_string(),
+        command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+    };
+
+    let readiness =
+        render_pre_launch_readiness_for_run(&command, &supported_environment()).unwrap();
+
+    assert!(readiness.contains("host readiness: strong"));
+    assert!(readiness.contains("launch readiness: degraded"));
+    assert!(readiness.contains("launch degraded reasons:"));
+    assert!(readiness.contains("--cgroup-root"));
+    assert!(readiness.contains("launch decision: refused unless --accept-degraded"));
+
+    let mut accepted_command = command.clone();
+    if let CliCommand::Run {
+        accept_degraded, ..
+    } = &mut accepted_command
+    {
+        *accept_degraded = true;
+    }
+    let accepted =
+        render_pre_launch_readiness_for_run(&accepted_command, &supported_environment()).unwrap();
+
+    assert!(accepted.contains("launch decision: degraded launch accepted by --accept-degraded"));
+}
+
+#[test]
 fn launch_supervised_run_blocks_required_cgroups_with_invalid_root_before_launch() {
     let config_path = temp_file("warder-cli-launch-invalid-required-cgroup-config", "toml");
     let db_path = temp_file("warder-cli-launch-invalid-required-cgroup-db", "sqlite3");
@@ -2538,6 +2644,7 @@ fn launch_supervised_run_blocks_required_cgroups_with_invalid_root_before_launch
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec![
@@ -2578,6 +2685,7 @@ fn launch_supervised_run_degrades_best_effort_cgroups_with_invalid_root() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 0".to_string()],
@@ -2643,6 +2751,7 @@ fn launch_supervised_run_persists_inotify_file_journal_events() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec![
@@ -2715,6 +2824,7 @@ fn launch_supervised_run_persists_inotify_events_inside_created_directories() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), command_text],
@@ -2764,6 +2874,7 @@ fn launch_supervised_run_records_dependency_file_diff() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), command_text],
@@ -2808,6 +2919,7 @@ fn launch_supervised_run_records_ebpf_journal_degraded_reason() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 0".to_string()],
@@ -2857,6 +2969,7 @@ fn launch_supervised_run_records_unwired_ebpf_attach_reason() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 0".to_string()],
@@ -2898,6 +3011,7 @@ fn launch_supervised_run_blocks_when_landlock_is_required_but_kernel_is_unavaila
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 99".to_string()],
@@ -2937,6 +3051,7 @@ fn launch_supervised_run_strict_mode_blocks_degraded_write_lockout() {
         snapshot_root: None,
         launch: true,
         require_enforcement: true,
+        accept_degraded: false,
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "exit 99".to_string()],
     };
@@ -2977,6 +3092,7 @@ fn launch_supervised_run_best_effort_still_records_degraded_write_lockout() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
     };
@@ -3046,6 +3162,7 @@ fn launch_supervised_run_marks_session_failed_when_spawn_fails() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["/definitely/missing/warder-test-command".to_string()],
@@ -3090,6 +3207,7 @@ fn launch_supervised_run_marks_session_failed_when_cgroup_tagging_errors() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string(), "-c".to_string(), "sleep 5".to_string()],
@@ -3128,6 +3246,7 @@ fn wait_failure_marks_session_failed_with_reason() {
         snapshot_root: None,
         launch: false,
         require_enforcement: false,
+        accept_degraded: false,
 
         agent: "local".to_string(),
         command: vec!["sh".to_string()],
@@ -5697,6 +5816,7 @@ fn quickstart_demo_config_allows_no_cgroup_root_launch_with_degraded_tagging() {
         snapshot_root: None,
         launch: true,
         require_enforcement: false,
+        accept_degraded: true,
 
         agent: "local-shell".to_string(),
         command: vec![

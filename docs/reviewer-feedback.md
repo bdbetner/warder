@@ -43,12 +43,13 @@ mkdir -p /tmp/warder-review-protected
 warder init --print --profile local-script --agent-command sh --protected-path /tmp/warder-review-protected > /tmp/warder-review.toml
 warder explain --config /tmp/warder-review.toml
 warder dry-run --config /tmp/warder-review.toml --agent local-script -- sh -c 'true'
-warder run --config /tmp/warder-review.toml --db /tmp/warder-review.sqlite3 --launch --agent local-script -- sh -c 'printf demo > /tmp/warder-review-protected/demo.txt'
+warder run --config /tmp/warder-review.toml --db /tmp/warder-review.sqlite3 --launch --accept-degraded --agent local-script -- sh -c 'printf demo > /tmp/warder-review-protected/demo.txt'
 warder receipt --db /tmp/warder-review.sqlite3 --session <session-id>
 warder journal --db /tmp/warder-review.sqlite3 --session <session-id> --file
 ```
 
 On many alpha review hosts, Landlock, delegated cgroups, Btrfs snapshots, or eBPF support may be unavailable. That is acceptable only if Warder reports the degraded coverage plainly before or after launch.
+CLI launches now refuse degraded pre-launch readiness unless the reviewer includes `--accept-degraded`; the demo command includes it so alpha hosts can still exercise receipt and journal review while seeing the degraded coverage in output.
 
 ## GUI Demo
 

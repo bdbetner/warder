@@ -51,6 +51,7 @@ cargo run -p warder-cli -- run \
   --db /tmp/warder-demo/warder.sqlite3 \
   --cgroup-root /tmp/warder-demo/cgroup \
   --launch \
+    --accept-degraded \
   --agent local-shell \
   -- sh -c 'echo hello > /tmp/warder-demo/protected/hello.txt'
 ```

@@ -81,8 +81,10 @@ warder dry-run --config warder.toml --agent local-script -- sh -c 'true'
 Launch a supervised session:
 
 ```bash
-warder run --config warder.toml --launch --agent local-script -- sh -c 'echo test'
+warder run --config warder.toml --launch --accept-degraded --agent local-script -- sh -c 'echo test'
 ```
+
+`--accept-degraded` is required when the launch readiness check finds incomplete protection, such as missing delegated cgroups, unavailable snapshots, or visibility-only eBPF journaling. Omit it when you want Warder to refuse degraded launches.
 
 Review the result:
 
@@ -167,7 +169,7 @@ Read [Security Model](docs/security-model.md), [Threat Model](THREAT_MODEL.md), 
 warder init --protected-path <path> [--output <path>] [--profile <id>] [--agent-command <command>] [--force] [--print]
 warder explain --config <path>
 warder dry-run --config <path> --agent <id> -- <agent command>
-warder run --config <path> --launch --agent <id> [--require-enforcement] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>
+warder run --config <path> --launch --agent <id> [--require-enforcement] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>
 warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>] [--verify-signature <hex>]
 warder receipt-key init [--output <path>] [--force]
 warder journal [--db <path>] [--file|--network|--all] [--session <id>]

@@ -36,11 +36,11 @@ warder profiles --format json >/dev/null
 warder init --print --profile local-script --agent-command sh --protected-path /tmp/warder-review-protected > /tmp/warder-review.toml
 warder explain --config /tmp/warder-review.toml
 warder dry-run --config /tmp/warder-review.toml --agent local-script -- sh -c 'true'
-warder run --config /tmp/warder-review.toml --launch --agent local-script -- sh -c 'printf demo > /tmp/warder-review-protected/demo.txt'
+warder run --config /tmp/warder-review.toml --launch --accept-degraded --agent local-script -- sh -c 'printf demo > /tmp/warder-review-protected/demo.txt'
 warder-desktop
 ```
 
-Expected result on degraded hosts: the session may report degraded Landlock, cgroup, Btrfs, or eBPF coverage, but the receipt must say so plainly.
+Expected result on degraded hosts: the launch must be refused unless `--accept-degraded` is present; when accepted, the session may report degraded Landlock, cgroup, Btrfs, or eBPF coverage, but the receipt must say so plainly.
 
 ## Pull-Release Criteria
 

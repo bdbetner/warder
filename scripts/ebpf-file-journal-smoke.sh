@@ -62,7 +62,7 @@ EOF_CONFIG
 run_output="$(
   WARDER_EBPF_FILE_OBJECT="${WARDER_EBPF_FILE_OBJECT:-$ebpf_object}" \
     cargo run -q -p warder-cli --features live-ebpf -- \
-    run --config "$config_path" --db "$db_path" --agent local-shell --launch -- \
+    run --config "$config_path" --db "$db_path" --agent local-shell --launch --accept-degraded -- \
     sh -c "cat '${protected_root}/input.txt' >/dev/null; printf live >> '${protected_root}/output.txt'"
 )"
 printf '%s\n' "$run_output"

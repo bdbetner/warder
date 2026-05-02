@@ -5,7 +5,7 @@
   "identifier": "dev.betnbd.warder",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && cargo build --release -p warder-cli",
     "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../dist"
   },

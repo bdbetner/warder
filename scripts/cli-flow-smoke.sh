@@ -94,6 +94,7 @@ run_output="$(
     --config "$CONFIG_PATH" \
     --db "$DB_PATH" \
     --launch \
+    --accept-degraded \
     --agent local-script \
     -- sh -c "printf hello > '$PROTECTED_ROOT/launched.txt'"
 )"

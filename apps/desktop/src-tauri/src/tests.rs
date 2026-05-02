@@ -52,6 +52,7 @@ fn build_cli_run_command_includes_launch_and_db() {
         "codex".to_string(),
         vec!["codex".to_string(), "--yolo".to_string()],
         true,
+        false,
     );
 
     assert_eq!(
@@ -72,6 +73,25 @@ fn build_cli_run_command_includes_launch_and_db() {
             "--yolo"
         ]
     );
+}
+
+#[test]
+fn build_cli_run_command_includes_degraded_acknowledgement_when_requested() {
+    let command = build_cli_run_command(
+        PathBuf::from("/tmp/warder/config.toml"),
+        PathBuf::from("/tmp/warder/warder.sqlite3"),
+        "codex".to_string(),
+        vec!["codex".to_string()],
+        false,
+        true,
+    );
+
+    assert!(command
+        .iter()
+        .any(|argument| argument == "--accept-degraded"));
+    assert!(!command
+        .iter()
+        .any(|argument| argument == "--require-enforcement"));
 }
 
 #[test]
@@ -147,6 +167,17 @@ fn desktop_tauri_config_sets_restrictive_csp() {
             "desktop CSP should not include {forbidden}"
         );
     }
+}
+
+#[test]
+fn desktop_tauri_config_rebuilds_cli_before_packaging() {
+    let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
+    let config = std::fs::read_to_string(config_path).expect("tauri config");
+
+    assert!(config.contains(
+        "\"beforeBuildCommand\": \"npm run build && cargo build --release -p warder-cli\""
+    ));
+    assert!(config.contains("\"/usr/bin/warder\": \"../../../target/release/warder\""));
 }
 
 #[test]
@@ -433,6 +464,7 @@ fn launch_session_runs_supervised_command_and_returns_receipt() {
         db_path,
         agent_id: "local-agent".to_string(),
         require_enforcement: false,
+        accept_degraded: true,
         command: vec![
             "sh".to_string(),
             "-c".to_string(),

@@ -25,6 +25,7 @@ pub struct LaunchRequest {
     pub agent_id: String,
     pub command: Vec<String>,
     pub require_enforcement: bool,
+    pub accept_degraded: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -289,6 +290,7 @@ pub fn build_launch_command_args(request: LaunchRequest) -> Result<Vec<String>, 
         request.agent_id,
         request.command,
         request.require_enforcement,
+        request.accept_degraded,
     ))
 }
 
@@ -302,6 +304,7 @@ pub fn launch_session(request: LaunchRequest) -> Result<LaunchSessionResult, Str
         snapshot_root: None,
         launch: true,
         require_enforcement: request.require_enforcement,
+        accept_degraded: request.accept_degraded,
         agent: request.agent_id,
         command: request.command,
     };
@@ -390,6 +393,7 @@ pub fn build_cli_run_command(
     agent_id: String,
     command: Vec<String>,
     require_enforcement: bool,
+    accept_degraded: bool,
 ) -> Vec<String> {
     let mut args = vec![
         "warder".to_string(),
@@ -402,6 +406,9 @@ pub fn build_cli_run_command(
     ];
     if require_enforcement {
         args.push("--require-enforcement".to_string());
+    }
+    if accept_degraded {
+        args.push("--accept-degraded".to_string());
     }
     args.extend(["--agent".to_string(), agent_id, "--".to_string()]);
     args.extend(command);

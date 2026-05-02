@@ -69,6 +69,7 @@ fi
     --config "$SESSION_ROOT/config.toml" \
     --db "$SESSION_ROOT/warder.sqlite3" \
     --launch \
+    --accept-degraded \
     --agent local-script \
     -- sh -c "printf installed > '$SESSION_ROOT/protected/out.txt'"
   ) > "$SESSION_ROOT/run.out"

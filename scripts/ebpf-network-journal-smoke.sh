@@ -142,7 +142,7 @@ run_output="$(
   WARDER_EBPF_FILE_OBJECT="${WARDER_EBPF_FILE_OBJECT:-$ebpf_file_object}" \
   WARDER_EBPF_NETWORK_OBJECT="${WARDER_EBPF_NETWORK_OBJECT:-$ebpf_network_object}" \
     cargo run -q -p warder-cli --features live-ebpf -- \
-    run --config "$config_path" --db "$db_path" --agent local-python --launch -- \
+    run --config "$config_path" --db "$db_path" --agent local-python --launch --accept-degraded -- \
     bash "$probe_script"
 )"
 printf '%s\n' "$run_output"

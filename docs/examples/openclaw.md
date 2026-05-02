@@ -5,7 +5,7 @@ Use this when OpenClaw should run as a supervised local command instead of recei
 ## Run
 
 ```bash
-warder run --config warder.toml --launch --agent openclaw -- openclaw ...
+warder run --config warder.toml --launch --accept-degraded --agent openclaw -- openclaw ...
 ```
 
 ## What Warder Provides

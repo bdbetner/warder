@@ -30,6 +30,7 @@ The product-completion pass is now in alpha review. The next security pass shoul
 - Release workflows should pin actions and verify release tags against passing CI.
 - The desktop CSP must not be null, and Tauri capability tests should keep plugin permissions narrow.
 - Desktop launches should default toward strict write-blocking, with best-effort degraded launches remaining an explicit user choice.
+- CLI launches now fail closed on degraded pre-launch readiness unless `--accept-degraded` is passed. The desktop passes that acknowledgement only for best-effort mode; strict write-blocking remains the default setup posture.
 - Receipt text and JSON should always state the limits around outside-Warder commands, read protection, network enforcement, and local receipt tamper resistance.
 - CI should include `cargo audit` so known RustSec vulnerabilities are visible before release.
 

@@ -67,6 +67,7 @@ pub enum CliCommand {
         snapshot_root: Option<PathBuf>,
         launch: bool,
         require_enforcement: bool,
+        accept_degraded: bool,
         agent: String,
         command: Vec<String>,
     },
@@ -2033,7 +2034,7 @@ impl DaemonTerminator for CommandDaemonTerminator {
 
 pub fn usage() -> &'static str {
     "usage: warder <command>\n\
-primary: warder run --config <path> --launch --agent <id> [--require-enforcement] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
+primary: warder run --config <path> --launch --agent <id> [--require-enforcement] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
 record only: warder run --config <path> --agent <id> -- <agent command>\n\
 preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
 readiness: warder doctor [--config <path>]\n\
@@ -2058,6 +2059,7 @@ pub fn create_run_session(
         snapshot_root,
         launch,
         require_enforcement: _,
+        accept_degraded: _,
         agent,
         command,
     } = command
@@ -2244,6 +2246,7 @@ pub fn launch_supervised_run(
         cgroup_root,
         launch,
         require_enforcement,
+        accept_degraded,
         command: child_command,
         ..
     } = command
@@ -2265,7 +2268,16 @@ pub fn launch_supervised_run(
         return err(message.clone());
     }
     let landlock_plan = planned_landlock_restrictions(&config, environment);
+    let snapshot_plan = planned_snapshot_plan(&config, environment);
+    let launch_readiness = planned_launch_readiness(
+        &config,
+        environment,
+        &cgroup_plan,
+        &landlock_plan,
+        &snapshot_plan,
+    );
     enforce_strict_write_lockout(*require_enforcement, &config, &landlock_plan)?;
+    enforce_degraded_launch_acceptance(*accept_degraded, &launch_readiness)?;
     let landlock_status = landlock_plan.status.clone();
     if let LandlockPlanStatus::Blocked(message) = landlock_status {
         return err(message);
@@ -2464,6 +2476,7 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
     let mut snapshot_root = None;
     let mut launch = false;
     let mut require_enforcement = false;
+    let mut accept_degraded = false;
     let mut agent = None;
     let mut index = 0;
     while index < options.len() {
@@ -2496,6 +2509,10 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
                 require_enforcement = true;
                 index += 1;
             }
+            "--accept-degraded" => {
+                accept_degraded = true;
+                index += 1;
+            }
             "--agent" => {
                 agent = Some(value_after(options, index, "--agent")?);
                 index += 2;
@@ -2515,6 +2532,7 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
         snapshot_root,
         launch,
         require_enforcement,
+        accept_degraded,
         agent,
         command,
     })
@@ -3516,6 +3534,152 @@ pub fn assess_environment_readiness(environment: &EnvironmentSupport) -> HostRea
 
 pub fn render_pre_launch_readiness(environment: &EnvironmentSupport) -> String {
     render_host_readiness(&assess_environment_readiness(environment))
+}
+
+pub fn render_pre_launch_readiness_for_run(
+    command: &CliCommand,
+    environment: &EnvironmentSupport,
+) -> Result<String, CliError> {
+    let CliCommand::Run {
+        config,
+        cgroup_root,
+        launch,
+        accept_degraded,
+        ..
+    } = command
+    else {
+        return err("pre-launch readiness requires a run command");
+    };
+    if !launch {
+        return err("pre-launch readiness requires --launch");
+    }
+    let config_path = config.as_ref().ok_or_else(|| CliError {
+        message: "run requires --config before pre-launch readiness can be checked".to_string(),
+    })?;
+    let config = load_config(config_path)?;
+    let cgroup_plan = planned_launch_cgroup_tagging(&config, cgroup_root.as_ref());
+    let landlock_plan = planned_landlock_restrictions(&config, environment);
+    let snapshot_plan = planned_snapshot_plan(&config, environment);
+    let launch_readiness = planned_launch_readiness(
+        &config,
+        environment,
+        &cgroup_plan,
+        &landlock_plan,
+        &snapshot_plan,
+    );
+
+    let mut lines = vec![render_host_readiness(&assess_environment_readiness(
+        environment,
+    ))];
+    lines.push(format!(
+        "launch readiness: {}",
+        readiness_level_label(launch_readiness.level)
+    ));
+    append_reason_list(
+        "launch blocked reasons",
+        &launch_readiness.blocked_reasons,
+        &mut lines,
+    );
+    append_reason_list(
+        "launch degraded reasons",
+        &launch_readiness.degraded_reasons,
+        &mut lines,
+    );
+    if launch_readiness.level == ReadinessLevel::Degraded && *accept_degraded {
+        lines.push("launch decision: degraded launch accepted by --accept-degraded".to_string());
+    } else if launch_readiness.level == ReadinessLevel::Degraded {
+        lines.push(
+            "launch decision: refused unless --accept-degraded is passed to acknowledge incomplete protection"
+                .to_string(),
+        );
+    } else if launch_readiness.level == ReadinessLevel::Blocked {
+        lines.push("launch decision: refused until blocked reasons are fixed".to_string());
+    } else {
+        lines.push("launch decision: ready".to_string());
+    }
+    Ok(lines.join("\n"))
+}
+
+fn planned_launch_readiness(
+    config: &WarderConfig,
+    environment: &EnvironmentSupport,
+    cgroup_plan: &LaunchCgroupTagPlan,
+    landlock_plan: &warder_enforcement::LandlockPlan,
+    snapshot_plan: &SnapshotPlan,
+) -> HostReadinessReport {
+    let validation = config.validate(environment);
+    let mut blocked_reasons = validation
+        .issues
+        .iter()
+        .filter(|issue| issue.severity == ConfigIssueSeverity::Error)
+        .map(|issue| issue.message.clone())
+        .collect::<Vec<_>>();
+    let mut degraded_reasons = validation
+        .issues
+        .iter()
+        .filter(|issue| issue.severity == ConfigIssueSeverity::Warning)
+        .map(|issue| issue.message.clone())
+        .collect::<Vec<_>>();
+
+    match cgroup_plan {
+        LaunchCgroupTagPlan::Blocked(message) => push_unique(&mut blocked_reasons, message.clone()),
+        LaunchCgroupTagPlan::Skip {
+            reason: Some(reason),
+            ..
+        } => push_unique(&mut degraded_reasons, reason.clone()),
+        LaunchCgroupTagPlan::Skip { reason: None, .. } | LaunchCgroupTagPlan::Tag { .. } => {}
+    }
+
+    match &landlock_plan.status {
+        LandlockPlanStatus::Blocked(message) => push_unique(&mut blocked_reasons, message.clone()),
+        LandlockPlanStatus::Degraded(message) => {
+            push_unique(&mut degraded_reasons, message.clone())
+        }
+        LandlockPlanStatus::Apply | LandlockPlanStatus::NotRequested => {}
+    }
+
+    append_snapshot_plan_validation(snapshot_plan, &mut blocked_reasons, &mut degraded_reasons);
+    if config.network.journal {
+        if let warder_journal::EbpfNetworkJournalAttachStatus::Unavailable(message) =
+            planned_ebpf_network_journal_attach(config, environment).status
+        {
+            push_unique(&mut degraded_reasons, message);
+        }
+    }
+    append_non_enforcing_network_policy_warning(config, &mut degraded_reasons);
+
+    let level = if !blocked_reasons.is_empty() {
+        ReadinessLevel::Blocked
+    } else if !degraded_reasons.is_empty() {
+        ReadinessLevel::Degraded
+    } else {
+        ReadinessLevel::Strong
+    };
+
+    HostReadinessReport {
+        level,
+        blocked_reasons,
+        degraded_reasons,
+    }
+}
+
+fn enforce_degraded_launch_acceptance(
+    accept_degraded: bool,
+    readiness: &HostReadinessReport,
+) -> Result<(), CliError> {
+    if !readiness.blocked_reasons.is_empty() {
+        return err(format!(
+            "launch refused because required protections are blocked: {}",
+            readiness.blocked_reasons.join("; ")
+        ));
+    }
+    if readiness.degraded_reasons.is_empty() || accept_degraded {
+        return Ok(());
+    }
+    err(format!(
+        "degraded launch refused; run `warder doctor --config <path>` and pass --accept-degraded only if this incomplete protection is acceptable: {}",
+        readiness.degraded_reasons.join("; ")
+    ))
 }
 
 fn readiness_level_label(level: ReadinessLevel) -> &'static str {

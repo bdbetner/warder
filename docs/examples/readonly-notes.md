@@ -31,7 +31,7 @@ profile = "local-script"
 
 ```bash
 warder dry-run --config warder.toml --agent local-shell -- sh -c 'ls /home/alex/notes'
-warder run --config warder.toml --launch --agent local-shell -- sh -c 'ls /home/alex/notes'
+warder run --config warder.toml --launch --accept-degraded --agent local-shell -- sh -c 'ls /home/alex/notes'
 ```
 
 ## Review

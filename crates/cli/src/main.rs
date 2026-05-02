@@ -112,7 +112,10 @@ fn main() {
             let environment = current_environment_support();
             match &command {
                 warder_cli::CliCommand::Run { launch: true, .. } => {
-                    println!("{}", warder_cli::render_pre_launch_readiness(&environment));
+                    match warder_cli::render_pre_launch_readiness_for_run(&command, &environment) {
+                        Ok(readiness) => println!("{readiness}"),
+                        Err(error) => exit_with_error(error),
+                    }
                     match warder_cli::launch_supervised_run(
                         &command,
                         &environment,

@@ -36,6 +36,7 @@ warder dry-run --config warder.toml --agent coding-agent -- codex
 warder run \
   --config warder.toml \
   --launch \
+    --accept-degraded \
   --agent coding-agent \
   --snapshot-root /path/to/snapshot-root \
   -- codex

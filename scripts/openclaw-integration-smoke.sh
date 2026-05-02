@@ -96,6 +96,7 @@ run_output="$(
     --config "$CONFIG_PATH" \
     --db "$DB_PATH" \
     --launch \
+    --accept-degraded \
     --agent openclaw \
     -- "$OPENCLAW_BIN" --version
 )"

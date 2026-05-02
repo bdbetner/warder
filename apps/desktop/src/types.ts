@@ -82,6 +82,7 @@ export interface LaunchRequest {
   agent_id: string;
   command: string[];
   require_enforcement: boolean;
+  accept_degraded: boolean;
 }
 
 export interface DesktopPaths {

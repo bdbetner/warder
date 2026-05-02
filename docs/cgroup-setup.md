@@ -74,10 +74,11 @@ warder run \
   --config examples/protected-zones/readonly-research.toml \
   --cgroup-root "/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/app.slice/<scope-name>.scope" \
   --launch \
+    --accept-degraded \
   --agent local \
   -- sh -c 'true'
 ```
 
 If the delegated scope path is not writable or lacks `cgroup.procs`, Warder must treat cgroup tagging as unsupported/degraded instead of silently running an untagged session.
 
-For configs with `cgroups = "required"`, `warder run --launch` refuses to start unless `--cgroup-root` is provided and looks like cgroup v2. For configs with `cgroups = "best-effort"`, launch can proceed without a usable `--cgroup-root`, but the receipt records cgroup tagging as degraded and includes the skipped-tagging reason. For configs with `cgroups = "disabled"`, launch records cgroup tagging as not requested.
+For configs with `cgroups = "required"`, `warder run --launch` refuses to start unless `--cgroup-root` is provided and looks like cgroup v2. For configs with `cgroups = "best-effort"`, launch without a usable `--cgroup-root` requires `--accept-degraded`; the receipt records cgroup tagging as degraded and includes the skipped-tagging reason. For configs with `cgroups = "disabled"`, launch records cgroup tagging as not requested.
