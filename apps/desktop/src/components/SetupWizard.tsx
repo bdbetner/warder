@@ -172,8 +172,8 @@ export function SetupWizard({
         </div>
         <h2>Protected paths</h2>
         <p className="notice">
-          Write protection is the v1 enforced control. Read selections are
-          visible policy notes only; Warder does not block reads in v1.
+          Write protection is the default enforced control. Read selections are
+          policy notes unless an advanced read-blocking config is edited by hand.
         </p>
         <div className="custom-path-form">
           <label className="field compact-field">

@@ -19,8 +19,10 @@ For each zone, decide:
 - Which paths belong in the zone?
 - Which agent labels may run while the zone is active?
 - Should writes be denied?
+- Should reads be denied with the experimental Landlock read-blocking mode?
 - Should a snapshot be required before launch?
 - Which writable roots are allowed?
+- Which readable roots are allowed if read blocking is enabled?
 - Should file activity be journaled?
 - Should network activity be journaled or gated?
 - Which degraded protections are acceptable?
@@ -30,6 +32,8 @@ For each zone, decide:
 Start with a small number of high-value zones. Protect credentials first, then private notes, then important projects.
 
 Keep readonly zones separate from workspaces where agents are expected to edit. That makes receipts easier to read and reduces accidental overlap between protected paths and writable roots.
+
+Read blocking is opt-in and stricter than write blocking. If a zone uses `read_policy = "deny"`, define `enforcement.readable_roots` as the exact directories the agent must still read, and keep those roots disjoint from the read-denied zone. Warder rejects overlapping readable roots because Landlock allow rules are additive.
 
 Use `warder explain` before the first real run:
 
@@ -51,6 +55,9 @@ If Warder reports degraded enforcement, read the reason before trusting the sess
 [network]
 journal = true
 
+[enforcement]
+writable_roots = ["/tmp"]
+
 [[zones]]
 id = "credentials"
 paths = ["/home/alex/.ssh", "/home/alex/.aws"]
@@ -62,6 +69,22 @@ id = "project"
 paths = ["/home/alex/projects/important-app"]
 write_policy = "deny"
 snapshot = "best-effort"
+```
+
+Read-blocking example:
+
+```toml
+[enforcement]
+readable_roots = ["/usr", "/bin", "/lib", "/lib64", "/tmp", "/home/alex/projects/agent-work"]
+writable_roots = ["/tmp", "/home/alex/projects/agent-work"]
+
+[[zones]]
+id = "credentials"
+name = "Credentials"
+paths = ["/home/alex/.ssh"]
+read_policy = "deny"
+write_policy = "deny"
+snapshot = "disabled"
 ```
 
 Prefer `warder init` for new configs, then edit the generated file for your real paths:

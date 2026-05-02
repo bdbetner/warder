@@ -111,7 +111,7 @@ function installInvokeMock() {
             command: ["true"],
             protected_zones: ["protected"],
             limitations: [
-              "Protected-path reads are not blocked in this alpha.",
+              "Protected-path reads are not blocked by default.",
               "Receipts are accountability records, not tamper-proof forensics.",
             ],
             enforcement: {

@@ -440,7 +440,7 @@ fn usage_centers_no_daemon_run_workflow() {
     let usage = usage();
 
     assert!(usage.contains(
-            "primary: warder run --config <path> --launch --agent <id> [--require-enforcement] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>"
+            "primary: warder run --config <path> --launch --agent <id> [--require-enforcement --receipt-key <path>] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>"
         ));
     assert!(
         usage.contains("record only: warder run --config <path> --agent <id> -- <agent command>")
@@ -456,7 +456,7 @@ fn usage_centers_no_daemon_run_workflow() {
             "recovery: warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]"
         ));
     assert!(usage.contains(
-            "inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>|--receipt-key <path>] [--verify-signature <hex>] | warder verify-receipts [--db <path>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status"
+            "inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>|--receipt-key <path>] [--verify-signature <hex>] | warder verify-receipts [--db <path>] [--external-key <path>|--receipt-key <path>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status"
         ));
     assert!(usage.contains("daemon optional"));
 }
@@ -2524,7 +2524,7 @@ fn launch_supervised_run_spawns_child_tags_pid_and_marks_completed() {
             .join("cgroup.procs"),
     )
     .unwrap();
-    assert_eq!(procs.trim(), session.root_pid.unwrap().to_string());
+    assert_eq!(procs.trim(), "0");
 }
 
 #[test]
@@ -3337,7 +3337,7 @@ fn launch_supervised_run_marks_session_failed_when_cgroup_tagging_errors() {
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].status, SessionStatus::Failed);
     assert!(sessions[0].ended_at.is_some());
-    assert!(sessions[0].root_pid.is_some());
+    assert!(sessions[0].root_pid.is_none());
     assert!(sessions[0]
         .degraded_reasons
         .iter()
@@ -3399,16 +3399,15 @@ fn render_session_receipt_summarizes_enforcement_state() {
     assert!(receipt.contains("profile: codex-cli"));
     assert!(receipt.contains("status: completed"));
     assert!(receipt.contains("exit code: 0"));
-    assert!(receipt.contains("cgroup: tagged post-spawn"));
+    assert!(receipt.contains("cgroup: tagged"));
     assert!(receipt.contains("landlock: degraded: Landlock unavailable"));
     assert!(receipt.contains("snapshot: not requested"));
-    assert!(receipt.contains("degraded coverage: 2 reason(s)"));
+    assert!(receipt.contains("degraded coverage: 1 reason(s)"));
     assert!(receipt.contains("degraded reasons:"));
     assert!(receipt.contains("Landlock unavailable"));
-    assert!(receipt.contains("cgroup tagging is applied after process spawn"));
     assert!(receipt.contains("receipt limitations:"));
     assert!(receipt.contains("commands run directly outside Warder are not contained"));
-    assert!(receipt.contains("Protected-path reads are not blocked in this alpha"));
+    assert!(receipt.contains("Protected-path reads are not blocked by default"));
     assert!(
         receipt.contains("limited to inotify protected-path changes plus live eBPF observations")
     );
@@ -3658,7 +3657,7 @@ fn render_session_receipt_json_is_structured() {
         .any(|limitation| limitation
             .as_str()
             .unwrap()
-            .contains("Protected-path reads are not blocked")));
+            .contains("Protected-path reads are not blocked by default")));
     assert!(parsed["limitations"]
         .as_array()
         .unwrap()
@@ -3680,15 +3679,11 @@ fn render_session_receipt_json_is_structured() {
         parsed["readiness"]["degraded_reasons"][0],
         "Landlock unavailable"
     );
-    assert_eq!(parsed["degraded_coverage"]["total_reasons"], 2);
+    assert_eq!(parsed["degraded_coverage"]["total_reasons"], 1);
     assert_eq!(parsed["degraded_reasons"][0], "Landlock unavailable");
     assert_eq!(
-        parsed["degraded_reasons"][1],
-        "cgroup tagging is applied after process spawn; early process attribution may be incomplete"
-    );
-    assert_eq!(
         parsed["enforcement"]["cgroup"]["message"],
-        "cgroup tagging is applied after process spawn; early process attribution may be incomplete"
+        serde_json::Value::Null
     );
     assert_eq!(parsed["review_actions"][0]["kind"], "doctor");
     assert_eq!(parsed["review_actions"][0]["command"], "warder doctor");

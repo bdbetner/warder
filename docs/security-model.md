@@ -7,6 +7,7 @@ Warder treats agent processes as untrusted. The core boundary is not a cooperati
 - Launch a command as a supervised session.
 - Apply protected-zone policy to that session.
 - Deny protected writes with Landlock where supported.
+- Deny protected reads only when an explicit experimental read-blocking policy and disjoint readable-root allowlist are configured.
 - Tag the session with cgroups where available.
 - Watch protected paths for file activity.
 - Record network observations where configured and supported.
@@ -36,6 +37,8 @@ Session ids are random local receipt identifiers, not secrets or authentication 
 
 Landlock is the preferred mechanism for preventing writes to protected paths. Path checks canonicalize where possible and reject traversal or unsafe overlaps in config, policy, snapshot, and enforcement planning paths. Missing paths and symlinks are handled deliberately so receipts can describe what was actually enforced or degraded.
 
+`read_policy = "deny"` is available as an explicit experimental policy. It requires `enforcement.readable_roots` and rejects readable roots that overlap read-denied protected paths. Landlock is allowlist-based, so read blocking is not a subtractive "hide this one folder from everything" rule. A bad readable-root allowlist can block agent dependencies or accidentally re-allow a protected path, so Warder fails config validation on contradictory read/write policy and overlapping readable roots.
+
 Best-effort launches may continue with degraded protection only after the caller passes `warder run --accept-degraded`. Without that acknowledgement, Warder refuses to spawn the command when pre-launch checks find degraded coverage. Strict launches with `warder run --require-enforcement` refuse to start when any required protected write blocking is not active or when `--receipt-key <path>` is missing/unreadable.
 
 Snapshot ids are validated before restore path construction. Restore planning must continue to reject path separators, traversal, absolute paths, and empty ids before joining anything below a snapshot root.
@@ -48,7 +51,9 @@ Network egress journaling has typed storage/readback, optional live eBPF observa
 
 These journals improve accountability. They are not the primary write-denial boundary and must not be described as complete socket forensics or network enforcement.
 
-Cgroup tagging supports attribution for journals and receipts. If tagging happens after spawn or fails for a process tree, the receipt should treat the attribution window as incomplete even when Landlock enforcement was installed through the child setup path.
+Cgroup tagging supports attribution for journals and receipts. Warder-launched sessions create the session cgroup before spawn and move the child into it from the child setup path before `exec`. If cgroup setup fails, the launch fails or degrades according to policy; processes launched directly outside Warder remain out of scope.
+
+The supervised setup path also installs a small seccomp filter that denies mount and namespace escape syscalls including `unshare`, `mount`, `umount2`, `pivot_root`, and `setns`.
 
 ## Snapshots
 

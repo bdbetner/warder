@@ -8,11 +8,11 @@ Warder should be published as an alpha Linux supervised-session tool, not as bro
 
 Defensible v1 promise:
 
-> Warder supervises commands launched through Warder, can deny protected writes with Linux Landlock where available, and records receipts that explain active and degraded coverage.
+> Warder supervises commands launched through Warder, can deny protected writes with Linux Landlock where available, can optionally apply experimental read-denial policies with an explicit readable-root allowlist, and records receipts that explain active and degraded coverage.
 
 Do not claim:
 
-- read blocking;
+- read blocking by default or without explicit `read_policy = "deny"` plus disjoint `enforcement.readable_roots`;
 - destination-aware network blocking;
 - receipts that cannot be altered by a local user or malware;
 - complete socket forensics;
@@ -50,7 +50,7 @@ Pull or replace a release if any of these are found:
 - protected writes are claimed as blocked when Landlock was not applied;
 - `--require-enforcement` launches despite missing required write-blocking;
 - GUI launch works with no protected path selected;
-- receipts or docs imply read blocking or network enforcement in v1;
+- receipts or docs imply default read blocking or network enforcement in v1;
 - package smoke fails for `.deb`, RPM, or AppImage;
 - checksum or manifest data does not match the uploaded artifacts;
 - a local secret or private workflow artifact is published in the release.

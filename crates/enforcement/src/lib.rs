@@ -1,5 +1,5 @@
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{self, Write};
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Component, Path, PathBuf};
@@ -31,6 +31,7 @@ pub struct LandlockRule {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LandlockAccess {
+    NoAccess,
     ReadOnly,
     ReadWrite,
 }
@@ -39,6 +40,7 @@ pub enum LandlockAccess {
 pub struct LandlockPlan {
     pub status: LandlockPlanStatus,
     pub rules: Vec<LandlockRule>,
+    pub handle_read: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -91,10 +93,14 @@ pub fn plan_landlock_restrictions(
     support: LandlockSupport,
     rules: Vec<LandlockRule>,
 ) -> LandlockPlan {
+    let handle_read = rules
+        .iter()
+        .any(|rule| rule.access == LandlockAccess::NoAccess);
     match requirement {
         LandlockRequirement::Disabled => LandlockPlan {
             status: LandlockPlanStatus::NotRequested,
             rules: Vec::new(),
+            handle_read: false,
         },
         LandlockRequirement::Required if !support.kernel_available => LandlockPlan {
             status: LandlockPlanStatus::Blocked(
@@ -102,12 +108,14 @@ pub fn plan_landlock_restrictions(
                     .to_string(),
             ),
             rules,
+            handle_read,
         },
         LandlockRequirement::BestEffort if !support.kernel_available => LandlockPlan {
             status: LandlockPlanStatus::Degraded(
                 "Landlock unavailable; filesystem enforcement is degraded".to_string(),
             ),
             rules,
+            handle_read,
         },
         LandlockRequirement::Required if !support.apply_available => LandlockPlan {
             status: LandlockPlanStatus::Blocked(
@@ -115,6 +123,7 @@ pub fn plan_landlock_restrictions(
                     .to_string(),
             ),
             rules,
+            handle_read,
         },
         LandlockRequirement::BestEffort if !support.apply_available => LandlockPlan {
             status: LandlockPlanStatus::Degraded(
@@ -122,6 +131,7 @@ pub fn plan_landlock_restrictions(
                     .to_string(),
             ),
             rules,
+            handle_read,
         },
         LandlockRequirement::Required | LandlockRequirement::BestEffort => {
             if let Some(message) = validate_landlock_write_rules(&rules) {
@@ -130,11 +140,28 @@ pub fn plan_landlock_restrictions(
                     LandlockRequirement::BestEffort => LandlockPlanStatus::Degraded(message),
                     LandlockRequirement::Disabled => unreachable!(),
                 };
-                return LandlockPlan { status, rules };
+                return LandlockPlan {
+                    status,
+                    rules,
+                    handle_read,
+                };
+            }
+            if let Some(message) = validate_landlock_read_rules(&rules) {
+                let status = match requirement {
+                    LandlockRequirement::Required => LandlockPlanStatus::Blocked(message),
+                    LandlockRequirement::BestEffort => LandlockPlanStatus::Degraded(message),
+                    LandlockRequirement::Disabled => unreachable!(),
+                };
+                return LandlockPlan {
+                    status,
+                    rules,
+                    handle_read,
+                };
             }
             LandlockPlan {
                 status: LandlockPlanStatus::Apply,
                 rules,
+                handle_read,
             }
         }
     }
@@ -143,7 +170,12 @@ pub fn plan_landlock_restrictions(
 fn validate_landlock_write_rules(rules: &[LandlockRule]) -> Option<String> {
     let readonly_rules = rules
         .iter()
-        .filter(|rule| rule.access == LandlockAccess::ReadOnly)
+        .filter(|rule| {
+            matches!(
+                rule.access,
+                LandlockAccess::ReadOnly | LandlockAccess::NoAccess
+            )
+        })
         .collect::<Vec<_>>();
     if readonly_rules.is_empty() {
         return None;
@@ -167,6 +199,35 @@ fn validate_landlock_write_rules(rules: &[LandlockRule]) -> Option<String> {
                     "Landlock writable root '{}' must not overlap protected readonly path '{}'",
                     writable.path.display(),
                     readonly.path.display()
+                ));
+            }
+        }
+    }
+
+    None
+}
+
+fn validate_landlock_read_rules(rules: &[LandlockRule]) -> Option<String> {
+    let read_denied_rules = rules
+        .iter()
+        .filter(|rule| rule.access == LandlockAccess::NoAccess)
+        .collect::<Vec<_>>();
+    if read_denied_rules.is_empty() {
+        return None;
+    }
+
+    for readable in rules.iter().filter(|rule| {
+        matches!(
+            rule.access,
+            LandlockAccess::ReadOnly | LandlockAccess::ReadWrite
+        )
+    }) {
+        for denied in &read_denied_rules {
+            if paths_overlap(&readable.path, &denied.path) {
+                return Some(format!(
+                    "Landlock readable root '{}' must not overlap protected read-denied path '{}'",
+                    readable.path.display(),
+                    denied.path.display()
                 ));
             }
         }
@@ -259,9 +320,13 @@ pub fn prepare_landlock_ruleset_with_kernel(
         LandlockPlanStatus::Apply => {}
     }
 
-    let ruleset_fd = kernel.create_ruleset(landlock_write_rights())?;
+    let ruleset_fd = kernel.create_ruleset(landlock_handled_rights(plan.handle_read))?;
     for rule in &plan.rules {
-        kernel.add_path_rule(ruleset_fd, rule, allowed_write_access(rule.access))?;
+        kernel.add_path_rule(
+            ruleset_fd,
+            rule,
+            allowed_landlock_access(rule.access, plan.handle_read),
+        )?;
     }
 
     Ok(LandlockPrepareStatus::Prepared { ruleset_fd })
@@ -289,10 +354,35 @@ fn landlock_write_rights() -> u64 {
         | LANDLOCK_ACCESS_FS_TRUNCATE
 }
 
-fn allowed_write_access(access: LandlockAccess) -> u64 {
+fn landlock_read_rights() -> u64 {
+    LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR
+}
+
+fn landlock_handled_rights(handle_read: bool) -> u64 {
+    let mut rights = landlock_write_rights();
+    if handle_read {
+        rights |= landlock_read_rights();
+    }
+    rights
+}
+
+fn allowed_landlock_access(access: LandlockAccess, handle_read: bool) -> u64 {
     match access {
-        LandlockAccess::ReadOnly => 0,
-        LandlockAccess::ReadWrite => landlock_write_rights(),
+        LandlockAccess::NoAccess => 0,
+        LandlockAccess::ReadOnly => {
+            if handle_read {
+                landlock_read_rights()
+            } else {
+                0
+            }
+        }
+        LandlockAccess::ReadWrite => {
+            if handle_read {
+                landlock_read_rights() | landlock_write_rights()
+            } else {
+                landlock_write_rights()
+            }
+        }
     }
 }
 
@@ -418,6 +508,8 @@ struct LandlockPathBeneathAttr {
 
 const LANDLOCK_RULE_PATH_BENEATH: u32 = 1;
 const LANDLOCK_ACCESS_FS_WRITE_FILE: u64 = 1 << 1;
+const LANDLOCK_ACCESS_FS_READ_FILE: u64 = 1 << 2;
+const LANDLOCK_ACCESS_FS_READ_DIR: u64 = 1 << 3;
 const LANDLOCK_ACCESS_FS_REMOVE_DIR: u64 = 1 << 4;
 const LANDLOCK_ACCESS_FS_REMOVE_FILE: u64 = 1 << 5;
 const LANDLOCK_ACCESS_FS_MAKE_CHAR: u64 = 1 << 6;
@@ -441,6 +533,27 @@ impl CgroupTagger {
     }
 
     pub fn tag_pid(&self, session_id: &str, pid: u32) -> Result<CgroupTagResult, CgroupTagError> {
+        let prepared = self.prepare_session_cgroup(session_id)?;
+        let Some(session_path) = prepared.cgroup_path else {
+            return Ok(prepared);
+        };
+        let mut procs = open_cgroup_procs(&session_path).map_err(|source| CgroupTagError {
+            message: format!("failed to open '{}': {source}", session_path.display()),
+        })?;
+        writeln!(procs, "{pid}").map_err(|source| CgroupTagError {
+            message: format!("failed to tag pid {pid}: {source}"),
+        })?;
+
+        Ok(CgroupTagResult {
+            cgroup_path: Some(session_path),
+            status: CgroupTagStatus::Tagged,
+        })
+    }
+
+    pub fn prepare_session_cgroup(
+        &self,
+        session_id: &str,
+    ) -> Result<CgroupTagResult, CgroupTagError> {
         validate_session_id(session_id)?;
 
         if !self.root.exists() {
@@ -470,16 +583,11 @@ impl CgroupTagger {
                 session_path.display()
             ),
         })?;
-        let procs_path = session_path.join("cgroup.procs");
-        let mut procs = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&procs_path)
-            .map_err(|source| CgroupTagError {
-                message: format!("failed to open '{}': {source}", procs_path.display()),
-            })?;
-        writeln!(procs, "{pid}").map_err(|source| CgroupTagError {
-            message: format!("failed to tag pid {pid}: {source}"),
+        open_cgroup_procs(&session_path).map_err(|source| CgroupTagError {
+            message: format!(
+                "failed to open '{}': {source}",
+                session_path.join("cgroup.procs").display()
+            ),
         })?;
 
         Ok(CgroupTagResult {
@@ -487,6 +595,18 @@ impl CgroupTagger {
             status: CgroupTagStatus::Tagged,
         })
     }
+}
+
+pub fn tag_current_process_into_cgroup(cgroup_path: &Path) -> io::Result<()> {
+    let mut procs = open_cgroup_procs(cgroup_path)?;
+    procs.write_all(b"0\n")
+}
+
+fn open_cgroup_procs(cgroup_path: &Path) -> io::Result<std::fs::File> {
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(cgroup_path.join("cgroup.procs"))
 }
 
 fn validate_session_id(session_id: &str) -> Result<(), CgroupTagError> {
@@ -518,6 +638,106 @@ pub enum CgroupTagStatus {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CgroupTagError {
     pub message: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeccompFilterError {
+    pub message: String,
+}
+
+pub fn supervised_seccomp_denied_syscalls() -> &'static [&'static str] {
+    &["unshare", "mount", "umount2", "pivot_root", "setns"]
+}
+
+#[cfg(target_os = "linux")]
+pub fn apply_supervised_seccomp_filter() -> Result<(), SeccompFilterError> {
+    unsafe {
+        let result = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+        if result != 0 {
+            return Err(SeccompFilterError {
+                message: format!(
+                    "failed to enable no_new_privs before seccomp: {}",
+                    io::Error::last_os_error()
+                ),
+            });
+        }
+    }
+
+    let denied = supervised_seccomp_denied_syscall_numbers();
+    let mut filters = Vec::with_capacity(2 + denied.len() * 2);
+    filters.push(seccomp_stmt(
+        (libc::BPF_LD | libc::BPF_W | libc::BPF_ABS) as u16,
+        0,
+    ));
+    for syscall in denied {
+        filters.push(seccomp_jump(
+            (libc::BPF_JMP | libc::BPF_JEQ | libc::BPF_K) as u16,
+            syscall,
+            0,
+            1,
+        ));
+        filters.push(seccomp_stmt(
+            (libc::BPF_RET | libc::BPF_K) as u16,
+            libc::SECCOMP_RET_ERRNO | libc::EPERM as u32,
+        ));
+    }
+    filters.push(seccomp_stmt(
+        (libc::BPF_RET | libc::BPF_K) as u16,
+        libc::SECCOMP_RET_ALLOW,
+    ));
+
+    let mut program = libc::sock_fprog {
+        len: filters.len() as u16,
+        filter: filters.as_mut_ptr(),
+    };
+    let result = unsafe {
+        libc::prctl(
+            libc::PR_SET_SECCOMP,
+            libc::SECCOMP_MODE_FILTER,
+            &mut program as *mut libc::sock_fprog,
+        )
+    };
+    if result != 0 {
+        return Err(SeccompFilterError {
+            message: format!(
+                "failed to install supervised seccomp filter: {}",
+                io::Error::last_os_error()
+            ),
+        });
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn apply_supervised_seccomp_filter() -> Result<(), SeccompFilterError> {
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn supervised_seccomp_denied_syscall_numbers() -> Vec<u32> {
+    vec![
+        libc::SYS_unshare as u32,
+        libc::SYS_mount as u32,
+        libc::SYS_umount2 as u32,
+        libc::SYS_pivot_root as u32,
+        libc::SYS_setns as u32,
+    ]
+}
+
+#[cfg(target_os = "linux")]
+fn seccomp_stmt(code: u16, k: u32) -> libc::sock_filter {
+    libc::sock_filter {
+        code,
+        jt: 0,
+        jf: 0,
+        k,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn seccomp_jump(code: u16, k: u32, jt: u8, jf: u8) -> libc::sock_filter {
+    libc::sock_filter { code, jt, jf, k }
 }
 
 #[cfg(test)]
@@ -682,6 +902,80 @@ mod tests {
     }
 
     #[test]
+    fn landlock_plan_blocks_readable_roots_that_overlap_read_denied_paths() {
+        let plan = plan_landlock_restrictions(
+            LandlockRequirement::Required,
+            LandlockSupport {
+                kernel_available: true,
+                apply_available: true,
+            },
+            vec![
+                LandlockRule {
+                    path: PathBuf::from("/home/user"),
+                    access: LandlockAccess::ReadOnly,
+                },
+                LandlockRule {
+                    path: PathBuf::from("/tmp"),
+                    access: LandlockAccess::ReadWrite,
+                },
+                LandlockRule {
+                    path: PathBuf::from("/home/user/.ssh"),
+                    access: LandlockAccess::NoAccess,
+                },
+            ],
+        );
+
+        assert!(matches!(
+            plan.status,
+            LandlockPlanStatus::Blocked(message) if message.contains("readable root")
+        ));
+        assert!(plan.handle_read);
+    }
+
+    #[test]
+    fn landlock_prepare_includes_read_rights_when_read_blocking_is_planned() {
+        let plan = LandlockPlan {
+            status: LandlockPlanStatus::Apply,
+            rules: vec![
+                LandlockRule {
+                    path: PathBuf::from("/opt/agent"),
+                    access: LandlockAccess::ReadOnly,
+                },
+                LandlockRule {
+                    path: PathBuf::from("/tmp"),
+                    access: LandlockAccess::ReadWrite,
+                },
+                LandlockRule {
+                    path: PathBuf::from("/home/user/.ssh"),
+                    access: LandlockAccess::NoAccess,
+                },
+            ],
+            handle_read: true,
+        };
+        let mut kernel = RecordingLandlockKernel::default();
+
+        let status = prepare_landlock_ruleset_with_kernel(&plan, &mut kernel).unwrap();
+
+        assert_eq!(status, LandlockPrepareStatus::Prepared { ruleset_fd: 7 });
+        assert_eq!(
+            kernel.created_rulesets,
+            vec![landlock_read_rights() | landlock_write_rights()]
+        );
+        assert_eq!(
+            kernel.added_rules,
+            vec![
+                (7, PathBuf::from("/opt/agent"), landlock_read_rights()),
+                (
+                    7,
+                    PathBuf::from("/tmp"),
+                    landlock_read_rights() | landlock_write_rights()
+                ),
+                (7, PathBuf::from("/home/user/.ssh"), 0),
+            ]
+        );
+    }
+
+    #[test]
     fn landlock_apply_uses_write_rights_and_rule_access_modes() {
         let plan = LandlockPlan {
             status: LandlockPlanStatus::Apply,
@@ -692,6 +986,7 @@ mod tests {
                     access: LandlockAccess::ReadWrite,
                 },
             ],
+            handle_read: false,
         };
         let mut kernel = RecordingLandlockKernel::default();
 
@@ -714,6 +1009,7 @@ mod tests {
         let plan = LandlockPlan {
             status: LandlockPlanStatus::Blocked("required support missing".to_string()),
             rules: vec![readonly_rule("/tmp/notes")],
+            handle_read: false,
         };
         let mut kernel = RecordingLandlockKernel::default();
 
@@ -733,6 +1029,7 @@ mod tests {
         let plan = LandlockPlan {
             status: LandlockPlanStatus::Apply,
             rules: vec![readonly_rule("/tmp/readonly")],
+            handle_read: false,
         };
         let mut kernel = RecordingLandlockKernel::default();
 
@@ -816,6 +1113,46 @@ mod tests {
         assert_eq!(
             fs::read_to_string(session_path.join("cgroup.procs")).unwrap(),
             "4242\n"
+        );
+    }
+
+    #[test]
+    fn prepare_session_cgroup_creates_cgroup_before_spawn_without_pid() {
+        let root = temp_path("prepare-cgroup");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("cgroup.procs"), "").unwrap();
+        let adapter = CgroupTagger::new(root.clone());
+
+        let result = adapter.prepare_session_cgroup("session-1").unwrap();
+
+        let session_path = root.join("warder").join("session-1");
+        assert_eq!(result.cgroup_path, Some(session_path.clone()));
+        assert_eq!(result.status, CgroupTagStatus::Tagged);
+        assert_eq!(
+            fs::read_to_string(session_path.join("cgroup.procs")).unwrap(),
+            ""
+        );
+    }
+
+    #[test]
+    fn tag_current_process_into_cgroup_uses_current_process_sentinel() {
+        let root = temp_path("tag-current");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("cgroup.procs"), "").unwrap();
+
+        tag_current_process_into_cgroup(&root).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(root.join("cgroup.procs")).unwrap(),
+            "0\n"
+        );
+    }
+
+    #[test]
+    fn supervised_seccomp_filter_denies_namespace_and_mount_syscalls() {
+        assert_eq!(
+            supervised_seccomp_denied_syscalls(),
+            ["unshare", "mount", "umount2", "pivot_root", "setns"]
         );
     }
 

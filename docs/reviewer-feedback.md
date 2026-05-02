@@ -11,9 +11,9 @@ This guide is for alpha reviewers evaluating Warder from release artifacts rathe
 
 ## What Warder Claims
 
-Warder supervises commands launched through `warder run`, can deny protected writes with Linux Landlock where the host supports it, and records receipts that explain active and degraded coverage.
+Warder supervises commands launched through `warder run`, can deny protected writes with Linux Landlock where the host supports it, can optionally apply experimental read-denial policies with an explicit readable-root allowlist, and records receipts that explain active and degraded coverage.
 
-Warder does not claim read blocking, network blocking, complete socket forensics, receipts that cannot be altered by a local user or malware, or always-on protection for commands launched outside Warder.
+Warder does not claim read blocking by default, network blocking, complete socket forensics, receipts that cannot be altered by a local user or malware, or always-on protection for commands launched outside Warder.
 
 ## Reviewer Setup
 

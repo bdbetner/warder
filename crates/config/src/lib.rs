@@ -71,6 +71,16 @@ impl WarderConfig {
                 ));
             }
         }
+        let mut readable_roots = HashSet::new();
+        for path in &self.enforcement.readable_roots {
+            validate_writable_root_path(&mut report, path);
+            if !readable_roots.insert(path.clone()) {
+                report.warning(format!(
+                    "Landlock readable root '{}' is declared more than once",
+                    path.display()
+                ));
+            }
+        }
 
         let mut zone_ids = HashSet::new();
         for zone in &self.zones {
@@ -123,6 +133,18 @@ impl WarderConfig {
                     zone.id
                 ));
             }
+            if zone.read_policy == ReadPolicy::Deny {
+                report.warning(format!(
+                    "protected zone '{}' has read_policy = \"deny\"; this is an explicit experimental read-blocking policy and may block agent dependencies unless readable_roots is complete",
+                    zone.id
+                ));
+                if zone.write_policy == WritePolicy::Allow {
+                    report.error(format!(
+                        "protected zone '{}' cannot combine read_policy = \"deny\" with write_policy = \"allow\"",
+                        zone.id
+                    ));
+                }
+            }
         }
 
         for left in 0..self.zones.len() {
@@ -134,6 +156,12 @@ impl WarderConfig {
             &mut report,
             self.enforcement.landlock,
             &self.enforcement.writable_roots,
+            &self.zones,
+        );
+        validate_readable_roots_against_zones(
+            &mut report,
+            self.enforcement.landlock,
+            &self.enforcement.readable_roots,
             &self.zones,
         );
 
@@ -167,6 +195,8 @@ pub struct EnforcementConfig {
     pub cgroups: EnforcementRequirement,
     #[serde(default)]
     pub writable_roots: Vec<PathBuf>,
+    #[serde(default)]
+    pub readable_roots: Vec<PathBuf>,
 }
 
 impl Default for EnforcementConfig {
@@ -175,6 +205,7 @@ impl Default for EnforcementConfig {
             landlock: EnforcementRequirement::Required,
             cgroups: EnforcementRequirement::Required,
             writable_roots: Vec::new(),
+            readable_roots: Vec::new(),
         }
     }
 }
@@ -198,6 +229,8 @@ pub struct ProtectedZoneConfig {
     pub paths: Vec<PathBuf>,
     #[serde(default = "default_write_policy", alias = "write_policy")]
     pub write_policy: WritePolicy,
+    #[serde(default = "default_read_policy", alias = "read_policy")]
+    pub read_policy: ReadPolicy,
     #[serde(default = "default_snapshot_policy")]
     pub snapshot: SnapshotPolicy,
 }
@@ -207,6 +240,13 @@ pub struct ProtectedZoneConfig {
 pub enum WritePolicy {
     Deny,
     Allow,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReadPolicy {
+    Allow,
+    Deny,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize)]
@@ -457,6 +497,59 @@ fn validate_writable_roots_against_zones(
     }
 }
 
+fn validate_readable_roots_against_zones(
+    report: &mut ConfigValidationReport,
+    landlock: EnforcementRequirement,
+    readable_roots: &[PathBuf],
+    zones: &[ProtectedZoneConfig],
+) {
+    if landlock == EnforcementRequirement::Disabled {
+        for readable_root in readable_roots {
+            if readable_root.is_absolute() {
+                report.warning(format!(
+                    "Landlock readable root '{}' is ignored because Landlock enforcement is disabled",
+                    readable_root.display()
+                ));
+            }
+        }
+        return;
+    }
+
+    let has_read_denied_zone = zones
+        .iter()
+        .any(|zone| zone.read_policy == ReadPolicy::Deny);
+    if has_read_denied_zone && readable_roots.is_empty() {
+        report.error(
+            "read_policy = \"deny\" requires at least one explicit enforcement.readable_roots entry"
+                .to_string(),
+        );
+    }
+
+    for readable_root in readable_roots {
+        if !readable_root.is_absolute() {
+            continue;
+        }
+        for zone in zones {
+            if zone.read_policy != ReadPolicy::Deny {
+                continue;
+            }
+            for zone_path in &zone.paths {
+                if !zone_path.is_absolute() {
+                    continue;
+                }
+                if paths_overlap(readable_root, zone_path) {
+                    report.error(format!(
+                        "Landlock readable root '{}' must not overlap read-denied protected zone '{}' path '{}'",
+                        readable_root.display(),
+                        zone.id,
+                        zone_path.display()
+                    ));
+                }
+            }
+        }
+    }
+}
+
 fn paths_overlap(left: &Path, right: &Path) -> bool {
     left == right || left.starts_with(right) || right.starts_with(left)
 }
@@ -492,6 +585,10 @@ fn default_required() -> EnforcementRequirement {
 
 fn default_write_policy() -> WritePolicy {
     WritePolicy::Deny
+}
+
+fn default_read_policy() -> ReadPolicy {
+    ReadPolicy::Allow
 }
 
 fn default_snapshot_policy() -> SnapshotPolicy {
@@ -1043,6 +1140,66 @@ agents:
         assert!(report.issues.iter().any(|issue| issue
             .message
             .contains("Landlock writable root '/tmp/secrets/cache' must not overlap write-denied protected zone 'secrets' path '/tmp/secrets'")));
+    }
+
+    #[test]
+    fn read_denied_zones_require_disjoint_readable_roots() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [enforcement]
+                readable-roots = ["/home/alex"]
+                writable-roots = ["/tmp"]
+
+                [[zones]]
+                id = "ssh"
+                name = "SSH"
+                paths = ["/home/alex/.ssh"]
+                read-policy = "deny"
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
+        assert!(report.has_errors());
+        assert!(report.issues.iter().any(|issue| issue
+            .message
+            .contains("Landlock readable root '/home/alex' must not overlap read-denied")));
+    }
+
+    #[test]
+    fn read_denied_zones_require_explicit_readable_roots() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [enforcement]
+                writable-roots = ["/tmp"]
+
+                [[zones]]
+                id = "ssh"
+                name = "SSH"
+                paths = ["/home/alex/.ssh"]
+                read-policy = "deny"
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
+        assert!(report.has_errors());
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.message.contains("requires at least one explicit")));
     }
 
     #[test]

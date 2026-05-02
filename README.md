@@ -48,7 +48,7 @@ It is not an always-on system guard. Warder only supervises commands launched th
 
 - Warder only supervises processes launched through `warder run`.
 - Host support matters: missing Landlock, cgroups, Btrfs, or eBPF permissions can reduce protection.
-- Protected reads are visible policy notes in v1; Warder does not block reads yet.
+- Protected reads are not blocked by default. Experimental Landlock read blocking is available only with explicit `read_policy = "deny"` plus disjoint `enforcement.readable_roots`.
 - Current network journaling is visibility, not complete network enforcement.
 - Local receipts and journals are useful accountability records, not tamper-proof forensics.
 - Alpha packages are checksummed and attested where available, but they are not package-manager signed.

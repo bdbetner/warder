@@ -7,13 +7,13 @@ use std::time::{Duration, Instant, SystemTime};
 use hmac::{Hmac, Mac};
 use serde::Serialize;
 use sha2::Sha256;
-use std::io::Read;
+use std::io::{self, Read};
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use warder_config::{
-    ConfigIssueSeverity, ConfigParseError, EnforcementRequirement, EnvironmentSupport,
+    ConfigIssueSeverity, ConfigParseError, EnforcementRequirement, EnvironmentSupport, ReadPolicy,
     SnapshotBackend as ConfigSnapshotBackend, SnapshotPolicy, WarderConfig, WritePolicy,
 };
 use warder_core::{
@@ -22,7 +22,8 @@ use warder_core::{
 };
 use warder_db::WarderDb;
 use warder_enforcement::{
-    plan_landlock_restrictions, prepare_landlock_ruleset_with_kernel, CgroupTagResult,
+    apply_supervised_seccomp_filter, plan_landlock_restrictions,
+    prepare_landlock_ruleset_with_kernel, tag_current_process_into_cgroup, CgroupTagResult,
     CgroupTagStatus, CgroupTagger, LandlockAccess, LandlockPlanStatus, LandlockPrepareStatus,
     LandlockRequirement, LandlockRule, LandlockSupport, SyscallLandlockKernel,
 };
@@ -2276,6 +2277,23 @@ pub fn apply_cgroup_tag_result(
     session_id: &str,
     result: CgroupTagResult,
 ) -> Result<(), CliError> {
+    apply_cgroup_tag_result_with_attribution_warning(db_path, session_id, result, true)
+}
+
+fn apply_pre_exec_cgroup_tag_result(
+    db_path: impl Into<PathBuf>,
+    session_id: &str,
+    result: CgroupTagResult,
+) -> Result<(), CliError> {
+    apply_cgroup_tag_result_with_attribution_warning(db_path, session_id, result, false)
+}
+
+fn apply_cgroup_tag_result_with_attribution_warning(
+    db_path: impl Into<PathBuf>,
+    session_id: &str,
+    result: CgroupTagResult,
+    post_spawn: bool,
+) -> Result<(), CliError> {
     let db = WarderDb::open(db_path.into()).map_err(db_error)?;
     db.migrate().map_err(db_error)?;
     let mut session = db
@@ -2289,10 +2307,12 @@ pub fn apply_cgroup_tag_result(
         CgroupTagStatus::Tagged => {
             session.cgroup_path = result.cgroup_path;
             session.cgroup_status = CgroupStatus::Tagged;
-            push_unique(
-                &mut session.degraded_reasons,
-                cgroup_post_spawn_attribution_warning().to_string(),
-            );
+            if post_spawn {
+                push_unique(
+                    &mut session.degraded_reasons,
+                    cgroup_post_spawn_attribution_warning().to_string(),
+                );
+            }
         }
         CgroupTagStatus::Unsupported(message) => {
             session.cgroup_path = None;
@@ -2393,6 +2413,33 @@ pub fn launch_supervised_run(
             validation_warnings.push(message.clone());
         }
     }
+    let prepared_cgroup_path = match &cgroup_plan {
+        LaunchCgroupTagPlan::Tag { root } => {
+            let result = CgroupTagger::new(root)
+                .prepare_session_cgroup(&outcome.session_id)
+                .map_err(|error| {
+                    let message = error.message;
+                    let _ = fail_session(&db_path, &outcome.session_id, message.clone());
+                    CliError { message }
+                })?;
+            match result.status {
+                CgroupTagStatus::Tagged => match result.cgroup_path {
+                    Some(path) => Some(path),
+                    None => {
+                        let message =
+                            "cgroup pre-exec tagging prepared without a session path".to_string();
+                        fail_session(&db_path, &outcome.session_id, message.clone())?;
+                        return err(message);
+                    }
+                },
+                CgroupTagStatus::Unsupported(message) => {
+                    fail_session(&db_path, &outcome.session_id, message.clone())?;
+                    return err(message);
+                }
+            }
+        }
+        _ => None,
+    };
     if let LaunchCgroupTagPlan::Skip { status, reason } = &cgroup_plan {
         set_session_cgroup_status(&db_path, &outcome.session_id, status.clone())?;
         if let Some(reason) = reason {
@@ -2455,7 +2502,11 @@ pub fn launch_supervised_run(
 
     let mut child_command = Command::new(program);
     child_command.args(args);
-    configure_landlock_child_setup(&mut child_command, prepared_landlock);
+    configure_supervised_child_setup(
+        &mut child_command,
+        prepared_landlock,
+        prepared_cgroup_path.clone(),
+    );
     let mut child = match child_command.spawn() {
         Ok(child) => child,
         Err(error) => {
@@ -2474,19 +2525,15 @@ pub fn launch_supervised_run(
     } else {
         None
     };
-    if let LaunchCgroupTagPlan::Tag { root } = &cgroup_plan {
-        let tagger = CgroupTagger::new(root);
-        let tag_result = match tagger.tag_pid(&outcome.session_id, child_pid) {
-            Ok(result) => result,
-            Err(error) => {
-                let message = error.message;
-                let _ = child.kill();
-                let _ = child.wait();
-                fail_session(&db_path, &outcome.session_id, message.clone())?;
-                return err(message);
-            }
-        };
-        apply_cgroup_tag_result(&db_path, &outcome.session_id, tag_result)?;
+    if let Some(cgroup_path) = prepared_cgroup_path {
+        apply_pre_exec_cgroup_tag_result(
+            &db_path,
+            &outcome.session_id,
+            CgroupTagResult {
+                cgroup_path: Some(cgroup_path),
+                status: CgroupTagStatus::Tagged,
+            },
+        )?;
     }
     let exit_code = wait_for_child_with_file_journals(
         &db_path,
@@ -3266,6 +3313,29 @@ pub fn assess_host_doctor(
         "cgroup v2 root is visible; use --cgroup-root with a delegated writable subtree for launch tagging",
         "cgroup v2 root is not visible; required cgroup tagging will block launch",
     ));
+    diagnostics.push(if warder_journal::live_ebpf_file_attach_available()
+        && warder_journal::live_ebpf_network_attach_available()
+    {
+        HostDiagnostic {
+            label: "eBPF tracepoint attach".to_string(),
+            status: HostDiagnosticStatus::Ok,
+            message: format!(
+                "live tracepoint attach is enabled for {} file and {} network tracepoints",
+                warder_journal::default_ebpf_file_tracepoints().len(),
+                warder_journal::default_ebpf_network_tracepoints().len()
+            ),
+        }
+    } else {
+        HostDiagnostic {
+            label: "eBPF tracepoint attach".to_string(),
+            status: HostDiagnosticStatus::Warning,
+            message: format!(
+                "one or more live eBPF tracepoint attach paths are unavailable; file tracepoints configured: {}, network tracepoints configured: {}",
+                warder_journal::default_ebpf_file_tracepoints().len(),
+                warder_journal::default_ebpf_network_tracepoints().len()
+            ),
+        }
+    });
 
     HostDoctorReport {
         readiness,
@@ -3593,14 +3663,7 @@ fn assess_session_readiness(session: &SessionRecord) -> HostReadinessReport {
 }
 
 fn session_effective_degraded_reasons(session: &SessionRecord) -> Vec<String> {
-    let mut reasons = session.degraded_reasons.clone();
-    if matches!(session.cgroup_status, CgroupStatus::Tagged) {
-        push_unique(
-            &mut reasons,
-            cgroup_post_spawn_attribution_warning().to_string(),
-        );
-    }
-    reasons
+    session.degraded_reasons.clone()
 }
 
 fn cgroup_post_spawn_attribution_warning() -> &'static str {
@@ -3917,8 +3980,8 @@ fn cgroup_status_label(status: &CgroupStatus, path: Option<&PathBuf>) -> String 
         CgroupStatus::NotRequested => "not requested".to_string(),
         CgroupStatus::Pending => "pending".to_string(),
         CgroupStatus::Tagged => match path {
-            Some(path) => format!("tagged post-spawn ({})", path.display()),
-            None => "tagged post-spawn".to_string(),
+            Some(path) => format!("tagged ({})", path.display()),
+            None => "tagged".to_string(),
         },
         CgroupStatus::Degraded(message) => format!("degraded: {message}"),
         CgroupStatus::Unsupported(message) => format!("unsupported: {message}"),
@@ -3946,7 +4009,7 @@ fn structured_cgroup_status(
         },
         CgroupStatus::Tagged => StructuredReceiptStatus {
             status: "tagged",
-            message: Some(cgroup_post_spawn_attribution_warning().to_string()),
+            message: None,
             path: path.map(|path| path.display().to_string()),
             backend: None,
             snapshot_id: None,
@@ -5144,7 +5207,7 @@ fn network_destination_label(event: &NetworkJournalEvent) -> String {
 fn receipt_limitations() -> Vec<&'static str> {
     vec![
         "Warder only supervises commands launched through warder run or the Warder desktop launcher; commands run directly outside Warder are not contained.",
-        "Protected-path reads are not blocked in this alpha; do not treat a receipt as evidence that readable secrets were protected from exfiltration.",
+        "Protected-path reads are not blocked by default; only explicit read_policy = \"deny\" zones with valid readable_roots use experimental Landlock read blocking.",
         warder_journal::file_visibility_contract(),
         warder_journal::network_visibility_contract(),
         "Network policy is visibility-only in this alpha; allowed destinations are not enforced and quiet network journals are not proof of no egress.",
@@ -5184,7 +5247,7 @@ fn receipt_review_guidance(
     }
     if matches!(session.cgroup_status, CgroupStatus::Tagged) {
         guidance.push(
-            "Cgroup tagging is currently applied after spawn, so early process attribution can be incomplete even when Landlock was installed in the child setup path."
+            "Cgroup tagging is applied in the child setup path before exec for supervised launches; direct processes outside Warder still are not contained."
                 .to_string(),
         );
     }
@@ -6141,13 +6204,23 @@ fn planned_landlock_restrictions(
 ) -> warder_enforcement::LandlockPlan {
     let mut rules = config
         .enforcement
-        .writable_roots
+        .readable_roots
         .iter()
         .map(|path| LandlockRule {
             path: path.clone(),
-            access: LandlockAccess::ReadWrite,
+            access: LandlockAccess::ReadOnly,
         })
         .collect::<Vec<_>>();
+    rules.extend(
+        config
+            .enforcement
+            .writable_roots
+            .iter()
+            .map(|path| LandlockRule {
+                path: path.clone(),
+                access: LandlockAccess::ReadWrite,
+            }),
+    );
     rules.extend(
         config
             .zones
@@ -6155,9 +6228,10 @@ fn planned_landlock_restrictions(
             .flat_map(|zone| {
                 zone.paths.iter().map(|path| LandlockRule {
                     path: path.clone(),
-                    access: match zone.write_policy {
-                        WritePolicy::Deny => LandlockAccess::ReadOnly,
-                        WritePolicy::Allow => LandlockAccess::ReadWrite,
+                    access: match (zone.read_policy, zone.write_policy) {
+                        (ReadPolicy::Deny, _) => LandlockAccess::NoAccess,
+                        (ReadPolicy::Allow, WritePolicy::Deny) => LandlockAccess::ReadOnly,
+                        (ReadPolicy::Allow, WritePolicy::Allow) => LandlockAccess::ReadWrite,
                     },
                 })
             })
@@ -6610,21 +6684,35 @@ fn prepare_landlock_for_launch(
 }
 
 #[cfg(target_os = "linux")]
-fn configure_landlock_child_setup(command: &mut Command, prepared: PreparedLandlock) {
+fn configure_supervised_child_setup(
+    command: &mut Command,
+    prepared_landlock: PreparedLandlock,
+    cgroup_path: Option<PathBuf>,
+) {
     use std::os::unix::process::CommandExt;
 
-    if let PreparedLandlock::Prepared { ruleset_fd } = prepared {
-        unsafe {
-            command.pre_exec(move || {
+    unsafe {
+        command.pre_exec(move || {
+            if let Some(path) = cgroup_path.as_deref() {
+                tag_current_process_into_cgroup(path)?;
+            }
+            apply_supervised_seccomp_filter().map_err(|error| io::Error::other(error.message))?;
+            if let PreparedLandlock::Prepared { ruleset_fd } = prepared_landlock {
                 warder_enforcement::restrict_current_process_to_landlock_ruleset(ruleset_fd)
-                    .map_err(|error| std::io::Error::other(error.message))
-            });
-        }
+                    .map_err(|error| io::Error::other(error.message))?;
+            }
+            Ok(())
+        });
     }
 }
 
 #[cfg(not(target_os = "linux"))]
-fn configure_landlock_child_setup(_command: &mut Command, _prepared: PreparedLandlock) {}
+fn configure_supervised_child_setup(
+    _command: &mut Command,
+    _prepared_landlock: PreparedLandlock,
+    _cgroup_path: Option<PathBuf>,
+) {
+}
 
 fn landlock_apply_supported() -> bool {
     cfg!(target_os = "linux")

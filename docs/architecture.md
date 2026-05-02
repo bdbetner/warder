@@ -27,14 +27,14 @@ Do not treat `warder start` as an always-on enforcement mode. The current produc
 3. Warder creates a session record.
 4. Warder prepares pre-launch controls such as snapshots and Landlock setup.
 5. Warder creates a snapshot when policy requires it.
-6. Warder applies Landlock restrictions before launching the agent.
-7. Warder tags the launched process with a session/agent cgroup where possible.
+6. Warder creates the per-session cgroup where configured.
+7. Warder moves the child into that cgroup, installs the supervised seccomp filter, and applies Landlock in the child setup path before `exec`.
 8. Warder watches protected paths with inotify.
 9. Warder records file and network activity where supported.
 10. Warder writes a readable session timeline.
 11. User can inspect the journal or revert a supported snapshot.
 
-The current cgroup tag is applied after process spawn. That is a known attribution race for journals and process-tree accounting. Landlock setup uses the child setup path, but receipts still need to report cgroup timing and tagging failures as coverage risks.
+The current launcher closes the prior post-spawn cgroup tagging race for Warder-launched sessions by moving the child into the session cgroup in the `pre_exec` setup path before user code runs. This does not contain direct processes launched outside Warder, and cgroup setup failures still have to be reported as coverage risks.
 
 ## Degraded Mode
 
