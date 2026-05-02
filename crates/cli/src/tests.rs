@@ -5608,6 +5608,22 @@ fn effective_agent_profile_infers_openclaw_subcommands_from_run_command() {
             "openclaw",
             &[
                 "openclaw".to_string(),
+                "--config".to_string(),
+                "/tmp/openclaw.json".to_string(),
+                "agent".to_string(),
+                "--message".to_string(),
+                "hello".to_string()
+            ]
+        )
+        .as_deref(),
+        Some("openclaw-agent")
+    );
+    assert_eq!(
+        effective_agent_profile_for_run(
+            None,
+            "openclaw",
+            &[
+                "openclaw".to_string(),
                 "message".to_string(),
                 "send".to_string()
             ]
@@ -5842,6 +5858,9 @@ fn openclaw_audit_warnings_maps_high_risk_checks() {
         "findings": [
             {"checkId": "gateway.bind_no_auth", "severity": "critical"},
             {"checkId": "sandbox.dangerous_bind_mount", "severity": "critical"},
+            {"checkId": "gateway.control_ui.device_auth_disabled", "severity": "critical"},
+            {"checkId": "tools.exec.safe_bins_broad_behavior", "severity": "warn"},
+            {"checkId": "hooks.request_session_key_enabled", "severity": "warn"},
             {"checkId": "models.legacy", "severity": "warn"}
         ]
     });
@@ -5854,6 +5873,15 @@ fn openclaw_audit_warnings_maps_high_risk_checks() {
     assert!(warnings
         .iter()
         .any(|warning| warning.contains("sandbox configuration weakens isolation")));
+    assert!(warnings
+        .iter()
+        .any(|warning| warning.contains("Gateway control surface exposure")));
+    assert!(warnings
+        .iter()
+        .any(|warning| warning.contains("exec tool policy is risky")));
+    assert!(warnings
+        .iter()
+        .any(|warning| warning.contains("hook or install trust-boundary warning")));
     assert!(!warnings
         .iter()
         .any(|warning| warning.contains("models.legacy")));

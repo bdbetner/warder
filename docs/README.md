@@ -5,6 +5,7 @@ Warder is a Linux supervised-session safety layer for local agent sessions. Star
 ## Try Warder
 
 - [Install Notes](install.md): download, verify, install, or build Warder.
+- [Linux Compatibility](linux-compatibility.md): supported release target, host requirements, and feature degradation.
 - [Reviewer Feedback Guide](reviewer-feedback.md): release-artifact demo path and feedback checklist.
 - [Prototype Demo](prototype-demo.md): run the source-checkout demo flow.
 - [Protected Zones](protected-zones.md): choose what Warder should protect.
@@ -28,6 +29,7 @@ Warder is a Linux supervised-session safety layer for local agent sessions. Star
 - [Roadmap](../ROADMAP.md): current and future work.
 - [Product Completion Plan](product-completion-plan.md): proposed final release shape.
 - [Scope](../MVP_SCOPE.md): what the current release includes and excludes.
+- [How Warder Fits](comparison.md): where Warder sits next to wrappers, containers, VMs, and host policy.
 - [Architecture](architecture.md): crate layout and session flow.
 - [Journals](audit-log.md): what receipts and journals can show.
 - [Journal Coverage](journal-coverage.md): exact file/network journal surfaces and blind spots.
@@ -37,7 +39,7 @@ Warder is a Linux supervised-session safety layer for local agent sessions. Star
 - [Cgroup Setup](cgroup-setup.md): delegated cgroup setup for stronger process tagging.
 - [Landlock Demo](landlock-demo.md): local write-denial demo.
 - [eBPF File Journal](ebpf-file-journal.md): privileged file-journal setup.
-- [OpenClaw Supervision](../integrations/openclaw/README.md): running OpenClaw through Warder.
+- [OpenClaw Integration](../integrations/openclaw/README.md): running OpenClaw through Warder.
 
 ## Maintainer Notes
 

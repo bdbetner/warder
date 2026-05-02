@@ -4767,7 +4767,7 @@ fn inferred_openclaw_profile(run_command: &[String]) -> Option<&'static str> {
     let subcommand = run_command
         .iter()
         .skip(1)
-        .find(|arg| !arg.starts_with('-'))
+        .find(|arg| matches!(arg.as_str(), "gateway" | "onboard" | "agent"))
         .map(String::as_str);
 
     match subcommand {
@@ -4990,12 +4990,23 @@ fn openclaw_audit_check_warning(check_id: &str, severity: &str) -> Option<String
         "Gateway auth or bind exposure"
     } else if check_id.contains("gateway.tailscale_funnel") {
         "public Tailscale Funnel exposure"
+    } else if check_id.contains("gateway.control_ui.")
+        || check_id.contains("gateway.trusted_proxy")
+        || check_id.contains("gateway.real_ip_fallback")
+        || check_id.contains("gateway.tools_invoke_http.dangerous_allow")
+        || check_id.contains("gateway.nodes.allow_commands_dangerous")
+    {
+        "Gateway control surface exposure"
     } else if check_id.contains("browser.") || check_id.contains("cdp") {
         "browser or CDP exposure"
     } else if check_id.contains("elevated") {
         "elevated host exec exposure"
     } else if check_id.contains("tools.exec.security_full") {
         "host exec is configured as full trust"
+    } else if check_id.contains("tools.exec.")
+        || check_id.contains("tools.profile_minimal_overridden")
+    {
+        "OpenClaw exec tool policy is risky"
     } else if check_id.contains("sandbox.dangerous_bind_mount")
         || check_id.contains("sandbox.dangerous_network_mode")
         || check_id.contains("sandbox.dangerous_seccomp_profile")
@@ -5004,6 +5015,14 @@ fn openclaw_audit_check_warning(check_id: &str, severity: &str) -> Option<String
         "OpenClaw sandbox configuration weakens isolation"
     } else if check_id.contains("plugins.") || check_id.contains("skills.") {
         "plugin or skill supply-chain warning"
+    } else if check_id.starts_with("hooks.") || check_id.contains(".installs_") {
+        "hook or install trust-boundary warning"
+    } else if check_id.contains("config.insecure_or_dangerous_flags")
+        || check_id.contains("logging.redact_off")
+        || check_id.contains("discovery.mdns_full_mode")
+        || check_id.contains("security.trust_model.")
+    {
+        "OpenClaw configuration weakens a security boundary"
     } else if check_id.starts_with("fs.") {
         "OpenClaw state or credential permissions are risky"
     } else if check_id.contains("security.exposure.open") {

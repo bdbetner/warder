@@ -74,14 +74,14 @@ OpenClaw owns app-level policy: Gateway auth, channel pairing, tool allow/deny r
 
 Warder owns the outer Linux host record: cgroup identity where available, Landlock protected-zone enforcement where supported, file and network journals, snapshot posture, and receipts that say which protections degraded.
 
-When available, Warder dry-runs call:
+When available, Warder's OpenClaw preflight calls:
 
 ```bash
 openclaw security audit --json
 openclaw sandbox explain --json
 ```
 
-Those checks are optional. Missing or unparseable OpenClaw output degrades Warder's OpenClaw preflight, but does not block ordinary command supervision.
+Those checks are optional and read-only. Missing or unparseable OpenClaw output degrades Warder's OpenClaw preflight, but does not block ordinary command supervision.
 
 Current OpenClaw `sandbox explain --json` output reports the effective sandbox mode, scope, workspace access, tool policy, elevated gates, and fix-it guidance. Warder consumes those fields directly and also accepts backend/runtime hints if OpenClaw exposes them later.
 
