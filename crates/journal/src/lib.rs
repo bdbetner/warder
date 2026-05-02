@@ -1523,7 +1523,7 @@ impl InotifyFileJournalWatcher {
             )));
         }
 
-        let (events, directories_to_watch) = parse_inotify_events(
+        let (mut events, directories_to_watch) = parse_inotify_events(
             session_id,
             process_id,
             &buffer[..bytes_read as usize],
@@ -1543,6 +1543,13 @@ impl InotifyFileJournalWatcher {
                 &directory.path,
                 &mut self.targets,
             )?;
+            // A fast child can create a directory and immediately write files
+            // inside it before user space receives the directory-create event
+            // and attaches the recursive watch. Scan once after attaching so
+            // those race-window files are still visible in the session journal.
+            events.extend(snapshot_newly_watched_directory_entries(
+                session_id, process_id, &directory,
+            ));
         }
         Ok(events)
     }
@@ -1666,6 +1673,49 @@ fn add_inotify_watch_tree_for_zone(
 struct InotifyDirectoryToWatch {
     zone_id: String,
     path: PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+fn snapshot_newly_watched_directory_entries(
+    session_id: &str,
+    process_id: Option<u32>,
+    directory: &InotifyDirectoryToWatch,
+) -> Vec<FileJournalEvent> {
+    let mut events = Vec::new();
+    let mut pending = vec![directory.path.clone()];
+    while let Some(current) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() && !file_type.is_symlink() {
+                pending.push(path);
+                continue;
+            }
+            let relative_path = path
+                .strip_prefix(&directory.path)
+                .ok()
+                .map(Path::to_path_buf);
+            if let Some(event) = plan_inotify_observed_event(
+                session_id,
+                process_id,
+                InotifyObservedEvent {
+                    zone_id: directory.zone_id.clone(),
+                    root_path: directory.path.clone(),
+                    relative_path,
+                    mask: INOTIFY_EVENT_CREATE,
+                    timestamp: SystemTime::now(),
+                },
+            ) {
+                events.push(event);
+            }
+        }
+    }
+    events
 }
 
 #[cfg(target_os = "linux")]
