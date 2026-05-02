@@ -64,8 +64,9 @@ Check these flows:
 - Setup requires at least one protected path.
 - Custom protected paths can be added, edited, removed, and saved.
 - Dry-run displays policy and degraded coverage before launch.
+- Launch is disabled until launch readiness has been reviewed.
 - Strict write-block mode refuses launch on hosts without required enforcement.
-- Normal launch completes on a degraded host and records honest degraded coverage.
+- Best-effort launch completes on a degraded host only after explicit degraded acknowledgement and records honest degraded coverage.
 - Receipt tabs show summary, file activity, network activity, snapshot/recovery, degraded coverage, and raw receipt.
 - Journal and receipt views handle missing or invalid sessions with readable errors.
 

@@ -137,6 +137,8 @@ fn render_launch_readiness_text_reports_gui_launch_decision() {
     .expect("launch readiness");
 
     assert!(readiness.contains("launch readiness: degraded"));
+    assert!(readiness.contains("launch visibility limits:"));
+    assert!(readiness.contains("already-open file descriptor writes"));
     assert!(readiness.contains("launch decision: degraded launch accepted"));
 
     let _ = std::fs::remove_dir_all(root);

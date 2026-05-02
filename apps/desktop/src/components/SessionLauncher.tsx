@@ -43,12 +43,44 @@ export function SessionLauncher({
   );
   const [launchReadiness, setLaunchReadiness] = useState("");
   const [cliCommand, setCliCommand] = useState("");
+  const [readinessReviewed, setReadinessReviewed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem(COMMAND_STATE_KEY, command);
   }, [command]);
+
+  useEffect(() => {
+    setReadinessReviewed(false);
+  }, [command, configPath, dbPath, requireEnforcement]);
+
+  async function reviewLaunchReadiness() {
+    setError(null);
+    setLaunchResult(null);
+    if (!hasProtectedPaths) {
+      setError("select at least one protected path before launching a session");
+      return;
+    }
+    try {
+      const request = launchRequest(
+        command,
+        configPath,
+        dbPath,
+        requireEnforcement,
+      );
+      const [readiness, cli] = await Promise.all([
+        invoke<string>("launch_readiness_text", { request }),
+        invoke<string[]>("build_launch_command", { request }),
+      ]);
+      setLaunchReadiness(readiness);
+      setCliCommand(formatShellCommand(cli));
+      setReadinessReviewed(true);
+    } catch (reason) {
+      setReadinessReviewed(false);
+      setError(String(reason));
+    }
+  }
 
   async function runDryRun() {
     setError(null);
@@ -58,7 +90,12 @@ export function SessionLauncher({
       return;
     }
     try {
-      const request = launchRequest(command, configPath, dbPath, requireEnforcement);
+      const request = launchRequest(
+        command,
+        configPath,
+        dbPath,
+        requireEnforcement,
+      );
       const [readiness, output, cli] = await Promise.all([
         invoke<string>("launch_readiness_text", { request }),
         invoke<string>("dry_run_text", {
@@ -71,7 +108,9 @@ export function SessionLauncher({
       setLaunchReadiness(readiness);
       setDryRun(output);
       setCliCommand(formatShellCommand(cli));
+      setReadinessReviewed(true);
     } catch (reason) {
+      setReadinessReviewed(false);
       setError(String(reason));
     }
   }
@@ -82,13 +121,23 @@ export function SessionLauncher({
       setError("select at least one protected path before launching a session");
       return;
     }
+    if (!readinessReviewed) {
+      setError("review launch readiness before starting this session");
+      return;
+    }
     setRunning(true);
     try {
-      const request = launchRequest(command, configPath, dbPath, requireEnforcement);
+      const request = launchRequest(
+        command,
+        configPath,
+        dbPath,
+        requireEnforcement,
+      );
       const readiness = await invoke<string>("launch_readiness_text", {
         request,
       });
       setLaunchReadiness(readiness);
+      setReadinessReviewed(true);
       const result = await invoke<LaunchSessionResult>("launch_session_command", {
         request,
       });
@@ -126,6 +175,11 @@ export function SessionLauncher({
           Select at least one protected path in setup before launching.
         </p>
       )}
+      {hasProtectedPaths && !readinessReviewed && (
+        <p className="notice">
+          Review launch readiness before starting this session.
+        </p>
+      )}
       <label className="field">
         Command
         <input
@@ -135,12 +189,15 @@ export function SessionLauncher({
         />
       </label>
       <div className="toolbar">
+        <button disabled={!hasProtectedPaths} onClick={reviewLaunchReadiness}>
+          Review readiness
+        </button>
         <button disabled={!hasProtectedPaths} onClick={runDryRun}>
           Dry run
         </button>
         <button
           className="primary"
-          disabled={running || !hasProtectedPaths}
+          disabled={running || !hasProtectedPaths || !readinessReviewed}
           onClick={runProtectedSession}
         >
           {running ? "Running..." : "Run protected session"}

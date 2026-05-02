@@ -166,11 +166,17 @@ describe("Warder desktop smoke flow", () => {
         name: "degraded",
       }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Run protected session" }),
+    ).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Dry run" }));
     expect(await screen.findByText(/launch readiness: degraded/)).toBeInTheDocument();
     expect(await screen.findByText(/validation: ok/)).toBeInTheDocument();
     expect(screen.getByText(/warder run --launch/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Run protected session" }),
+    ).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Run protected session" }));
     expect(await screen.findByText(/session-smoke finished/)).toBeInTheDocument();
@@ -238,6 +244,7 @@ describe("Warder desktop smoke flow", () => {
     expect(
       screen.getByRole("button", { name: "Start protected session" }),
     ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review readiness" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Dry run" })).toBeDisabled();
   });
 

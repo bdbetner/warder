@@ -3585,6 +3585,11 @@ pub fn render_pre_launch_readiness_for_run(
         &launch_readiness.degraded_reasons,
         &mut lines,
     );
+    append_reason_list(
+        "launch visibility limits",
+        &planned_launch_visibility_limits(&config),
+        &mut lines,
+    );
     if launch_readiness.level == ReadinessLevel::Degraded && *accept_degraded {
         lines.push("launch decision: degraded launch accepted by --accept-degraded".to_string());
     } else if launch_readiness.level == ReadinessLevel::Degraded {
@@ -3598,6 +3603,23 @@ pub fn render_pre_launch_readiness_for_run(
         lines.push("launch decision: ready".to_string());
     }
     Ok(lines.join("\n"))
+}
+
+fn planned_launch_visibility_limits(config: &WarderConfig) -> Vec<String> {
+    let mut limits = Vec::new();
+    if !config.zones.is_empty() {
+        limits.push(
+            "file journals are best-effort visibility; inotify/eBPF can miss already-open file descriptor writes, writable memory maps, bind mounts, namespace changes, and activity outside Warder attribution"
+                .to_string(),
+        );
+    }
+    if config.network.journal {
+        limits.push(
+            "network journals are best-effort visibility; eBPF/procfs can miss connected-socket writes, sendfile/splice, raw or Unix sockets, and activity outside Warder attribution"
+                .to_string(),
+        );
+    }
+    limits
 }
 
 fn planned_launch_readiness(
@@ -5010,6 +5032,7 @@ fn receipt_limitations() -> Vec<&'static str> {
     vec![
         "Warder only supervises commands launched through warder run or the Warder desktop launcher; commands run directly outside Warder are not contained.",
         "Protected-path reads are not blocked in this alpha; do not treat a receipt as evidence that readable secrets were protected from exfiltration.",
+        "File journals are best-effort visibility; inotify/eBPF can miss already-open file descriptor writes, writable memory maps, bind mounts, namespace changes, and out-of-session activity.",
         "Network policy is visibility-only in this alpha; allowed destinations are not enforced and quiet network journals are not proof of no egress.",
         "Receipts and the local SQLite journal are accountability records, not tamper-proof forensics or append-only evidence.",
     ]

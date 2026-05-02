@@ -20,8 +20,9 @@ Do not claim:
 
 ## Product Decisions
 
-- Strict write-block launch is opt-in. It should stay visible in the CLI and GUI, but not default-on, because many review hosts will otherwise fail before users can learn the workflow.
+- Strict write-block launch is the default for new GUI setups. Best-effort launch remains available as an explicit reviewer choice for hosts that cannot apply protected write blocking.
 - The GUI must require at least one protected path before saving setup or launching.
+- The GUI must require launch-readiness review before enabling every launch.
 - Receipts are both user-facing accountability evidence and developer diagnostics. They must separate enforced controls, observed activity, degraded coverage, and suggested next actions.
 - AppImage is GUI-only. Release notes and install docs must pair it with the standalone `warder` CLI binary.
 - The daemon remains experimental. Normal v1 demos and docs should use `warder run`, not daemon workflows.

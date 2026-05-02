@@ -42,7 +42,7 @@ Known blind spots include short-lived sockets that open and close between procfs
 
 If a config contains `network.allowed_destinations`, receipts must not imply that those destinations were enforced until Warder has a blocking egress implementation. In the current alpha, destination policy should be reported as planned or non-enforcing metadata.
 
-Receipts and journal output should keep these limits visible whenever network events are present or when network coverage is degraded.
+Pre-launch readiness, receipts, and journal output should keep these limits visible. Warder reports journal blind spots as visibility limits, separate from enforcement readiness, so users can distinguish "write blocking is unavailable" from "observation is incomplete."
 
 ## Receipt Signing
 

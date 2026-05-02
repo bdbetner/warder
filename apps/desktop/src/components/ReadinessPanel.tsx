@@ -13,6 +13,7 @@ export function ReadinessPanel() {
       setReadiness(result);
     } catch (reason) {
       setError(String(reason));
+      setReadiness(null);
     }
   }
 

@@ -97,7 +97,7 @@ warder journal --db .warder/warder.db --session <session-id> --file
 
 The native Linux desktop app lives in `apps/desktop`. It helps create a Warder config, launch supervised sessions, and review receipts and journals.
 
-The GUI requires at least one protected path before saving setup or launching. Strict write-block mode is available as an explicit toggle, but it is not enabled by default because many Linux hosts do not expose usable Landlock support.
+The GUI requires at least one protected path before saving setup or launching. New setups default to strict write-block launch, and best-effort launch is an explicit toggle for reviewers who accept degraded protection on hosts without usable Landlock support. The GUI requires a fresh launch-readiness review before the run button is enabled.
 
 Development launch:
 

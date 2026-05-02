@@ -2610,6 +2610,9 @@ fn render_pre_launch_readiness_for_run_reports_launch_decision() {
     assert!(readiness.contains("launch degraded reasons:"));
     assert!(readiness.contains("--cgroup-root"));
     assert!(readiness.contains("eBPF file journaling unavailable"));
+    assert!(readiness.contains("launch visibility limits:"));
+    assert!(readiness.contains("already-open file descriptor writes"));
+    assert!(readiness.contains("connected-socket writes"));
     assert!(readiness.contains("launch decision: refused unless --accept-degraded"));
 
     let mut accepted_command = command.clone();
@@ -3295,6 +3298,7 @@ fn render_session_receipt_summarizes_enforcement_state() {
     assert!(receipt.contains("receipt limitations:"));
     assert!(receipt.contains("commands run directly outside Warder are not contained"));
     assert!(receipt.contains("Protected-path reads are not blocked in this alpha"));
+    assert!(receipt.contains("File journals are best-effort visibility"));
     assert!(receipt.contains("Network policy is visibility-only in this alpha"));
     assert!(receipt.contains("not tamper-proof forensics"));
 }
@@ -3541,6 +3545,14 @@ fn render_session_receipt_json_is_structured() {
             .as_str()
             .unwrap()
             .contains("Protected-path reads are not blocked")));
+    assert!(parsed["limitations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|limitation| limitation
+            .as_str()
+            .unwrap()
+            .contains("File journals are best-effort visibility")));
     assert_eq!(parsed["enforcement"]["cgroup"]["status"], "tagged");
     assert_eq!(parsed["enforcement"]["landlock"]["status"], "degraded");
     assert_eq!(parsed["enforcement"]["snapshot"]["status"], "not_requested");
