@@ -117,6 +117,12 @@ impl WarderConfig {
                 warn_if_zones_overlap(&mut report, &self.zones[left], &self.zones[right]);
             }
         }
+        validate_writable_roots_against_zones(
+            &mut report,
+            self.enforcement.landlock,
+            &self.enforcement.writable_roots,
+            &self.zones,
+        );
 
         let mut agent_ids = HashSet::new();
         for agent in &self.agents {
@@ -384,10 +390,7 @@ fn warn_if_zones_overlap(
                 continue;
             }
 
-            if left_path == right_path
-                || left_path.starts_with(right_path)
-                || right_path.starts_with(left_path)
-            {
+            if paths_overlap(left_path, right_path) {
                 report.warning(format!(
                     "protected zones '{}' and '{}' have overlapping paths",
                     left.id, right.id
@@ -396,6 +399,53 @@ fn warn_if_zones_overlap(
             }
         }
     }
+}
+
+fn validate_writable_roots_against_zones(
+    report: &mut ConfigValidationReport,
+    landlock: EnforcementRequirement,
+    writable_roots: &[PathBuf],
+    zones: &[ProtectedZoneConfig],
+) {
+    if landlock == EnforcementRequirement::Disabled {
+        for writable_root in writable_roots {
+            if writable_root.is_absolute() {
+                report.warning(format!(
+                    "Landlock writable root '{}' is ignored because Landlock enforcement is disabled",
+                    writable_root.display()
+                ));
+            }
+        }
+        return;
+    }
+
+    for writable_root in writable_roots {
+        if !writable_root.is_absolute() {
+            continue;
+        }
+        for zone in zones {
+            if zone.write_policy != WritePolicy::Deny {
+                continue;
+            }
+            for zone_path in &zone.paths {
+                if !zone_path.is_absolute() {
+                    continue;
+                }
+                if paths_overlap(writable_root, zone_path) {
+                    report.error(format!(
+                        "Landlock writable root '{}' must not overlap write-denied protected zone '{}' path '{}'",
+                        writable_root.display(),
+                        zone.id,
+                        zone_path.display()
+                    ));
+                }
+            }
+        }
+    }
+}
+
+fn paths_overlap(left: &Path, right: &Path) -> bool {
+    left == right || left.starts_with(right) || right.starts_with(left)
 }
 
 fn is_whole_home_path(path: &Path) -> bool {
@@ -886,6 +936,72 @@ agents:
             .any(|issue| issue.severity == ConfigIssueSeverity::Warning
                 && issue.message.contains(
                     "protected zone 'notes' path '/tmp/notes' is declared more than once"
+                )));
+    }
+
+    #[test]
+    fn rejects_writable_roots_that_overlap_write_denied_zones() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [enforcement]
+                writable-roots = ["/tmp/work", "/tmp/secrets/cache"]
+
+                [[zones]]
+                id = "secrets"
+                name = "Secrets"
+                paths = ["/tmp/work/secrets", "/tmp/secrets"]
+                write-policy = "deny"
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
+        assert!(report.has_errors());
+        assert!(report.issues.iter().any(|issue| issue
+            .message
+            .contains("Landlock writable root '/tmp/work' must not overlap write-denied protected zone 'secrets' path '/tmp/work/secrets'")));
+        assert!(report.issues.iter().any(|issue| issue
+            .message
+            .contains("Landlock writable root '/tmp/secrets/cache' must not overlap write-denied protected zone 'secrets' path '/tmp/secrets'")));
+    }
+
+    #[test]
+    fn warns_when_writable_roots_are_ignored_with_landlock_disabled() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [enforcement]
+                landlock = "disabled"
+                writable-roots = ["/tmp/work"]
+
+                [[zones]]
+                id = "workspace"
+                name = "Workspace"
+                paths = ["/tmp/work"]
+                write-policy = "allow"
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
+        assert!(!report.has_errors());
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.severity == ConfigIssueSeverity::Warning
+                && issue.message.contains(
+                    "Landlock writable root '/tmp/work' is ignored because Landlock enforcement is disabled"
                 )));
     }
 }

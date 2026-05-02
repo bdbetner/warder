@@ -10,6 +10,7 @@ The first engineering passes focused on defects that were concrete, local, and t
 - SQLite state creation, permissions, migrations, concurrency settings, and session ids were hardened.
 - `network.allowed_destinations` is reported as non-enforcing metadata until a blocking backend exists.
 - Path canonicalization and traversal handling now have focused tests across config, policy, snapshot, and Landlock planning.
+- Config validation rejects Landlock writable roots that overlap write-denied protected zones and warns when writable roots are ignored because Landlock is disabled.
 - The cgroup spawn/tag attribution race is reported in receipts; true pre-spawn placement remains a future launcher/helper.
 
 The product-completion pass is now in alpha review. The next security pass should focus on issues that need deeper design or privileged-host evidence: true pre-spawn cgroup placement, broader live-journal coverage, public-key or external receipt attestation, optional seccomp/capability boundaries, and daemon coordination only if a tested workflow requires it.
@@ -22,6 +23,7 @@ The product-completion pass is now in alpha review. The next security pass shoul
 - Session ids are random local receipt identifiers, not authentication tokens.
 - Cgroup tagging occurs after spawn, creating a journal attribution window before tagging is complete.
 - Network destination allowlists are parsed but not enforced.
+- Config validation should keep catching policy contradictions such as writable roots overlapping write-denied protected zones.
 - Default state paths are user-scoped XDG paths; old `.warder` paths should remain a compatibility concern.
 - Daemon runtime state uses atomic writes and stale-PID checks.
 - The daemon remains an experimental runtime skeleton, not an active enforcement service.
