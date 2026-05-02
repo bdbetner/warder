@@ -40,7 +40,7 @@ The current live file eBPF journal covers common path-based file syscalls plus f
 
 Known blind spots include fd and mmap observations that cannot be resolved to protected paths, bind mounts, namespace changes, unsupported syscall families, short-lived sockets that open and close between procfs polls, connected-socket writes where neither eBPF nor procfs can resolve the peer, batched `sendmmsg(2)` destinations after the first message, sockets in processes outside the supervised process tree, destination interpretation above the syscall sockaddr layer, and traffic outside the supervised process attribution window.
 
-If a config contains `network.allowed_destinations`, receipts must not imply that those destinations were enforced until Warder has a blocking egress implementation. In the current alpha, destination policy should be reported as planned or non-enforcing metadata.
+If a config contains `network.allowed_destinations`, receipts must not imply that those destinations were enforced until Warder has a blocking egress implementation. In the current public beta, destination policy should be reported as planned or non-enforcing metadata.
 
 Pre-launch readiness, receipts, and journal output should keep these limits visible. Warder reports journal blind spots as visibility limits, separate from enforcement readiness, so users can distinguish "write blocking is unavailable" from "observation is incomplete."
 

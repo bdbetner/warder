@@ -1,11 +1,11 @@
 # Reviewer Feedback Guide
 
-This guide is for alpha reviewers evaluating Warder from release artifacts rather than a source checkout.
+This guide is for public beta reviewers evaluating Warder from release artifacts rather than a source checkout.
 
 ## Current Release
 
-- Release: `v0.1.0-alpha.11`
-- Release page: <https://github.com/betnbd/warder/releases/tag/v0.1.0-alpha.11>
+- Release: `v1.0.0-beta.1`
+- Release page: <https://github.com/betnbd/warder/releases/tag/v1.0.0-beta.1>
 - Platform target: Linux x86_64
 - Recommended install path: `.deb` on Ubuntu/Debian or RPM on RPM-based distros
 
@@ -20,7 +20,7 @@ Warder does not claim read blocking by default, network blocking, complete socke
 Download and verify the release:
 
 ```bash
-gh release download v0.1.0-alpha.11 --repo betnbd/warder --dir warder-linux-x86_64
+gh release download v1.0.0-beta.1 --repo betnbd/warder --dir warder-linux-x86_64
 cd warder-linux-x86_64
 sha256sum --check SHA256SUMS
 python3 -m json.tool release-manifest.json >/dev/null
@@ -29,7 +29,7 @@ python3 -m json.tool release-manifest.json >/dev/null
 Install on Ubuntu/Debian:
 
 ```bash
-sudo apt install ./Warder_0.1.0_amd64.deb
+sudo apt install ./Warder_*.deb
 warder --version
 warder profiles --format json >/dev/null
 ```
@@ -48,8 +48,8 @@ warder receipt --db /tmp/warder-review.sqlite3 --session <session-id>
 warder journal --db /tmp/warder-review.sqlite3 --session <session-id> --file
 ```
 
-On many alpha review hosts, Landlock, delegated cgroups, Btrfs snapshots, or eBPF support may be unavailable. That is acceptable only if Warder reports the degraded coverage plainly before or after launch.
-CLI launches now refuse degraded pre-launch readiness unless the reviewer includes `--accept-degraded`; the demo command includes it so alpha hosts can still exercise receipt and journal review while seeing the degraded coverage in output.
+On many review hosts, Landlock, delegated cgroups, Btrfs snapshots, or eBPF support may be unavailable. That is acceptable only if Warder reports the degraded coverage plainly before or after launch.
+CLI launches now refuse degraded pre-launch readiness unless the reviewer includes `--accept-degraded`; the demo command includes it so degraded hosts can still exercise receipt and journal review while seeing the degraded coverage in output.
 
 ## GUI Demo
 

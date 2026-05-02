@@ -3421,7 +3421,7 @@ fn render_session_receipt_summarizes_enforcement_state() {
         receipt.contains("limited to inotify protected-path changes plus live eBPF observations")
     );
     assert!(receipt.contains("fd writes"));
-    assert!(receipt.contains("Network policy is visibility-only in this alpha"));
+    assert!(receipt.contains("Network policy is visibility-only in this public beta"));
     assert!(receipt.contains("not tamper-proof forensics"));
 }
 

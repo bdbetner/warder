@@ -60,7 +60,7 @@ A receipt is the user-facing record of a session. It should answer:
 
 ## Current Alpha Scope
 
-The current alpha is a Linux-first CLI with a native desktop companion.
+The current public beta is a Linux-first CLI with a native desktop companion.
 
 It can:
 

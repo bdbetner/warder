@@ -20,7 +20,7 @@ Warder treats agent processes as untrusted. The core boundary is not a cooperati
 - It cannot make unsupported kernels or filesystems enforce features they do not support.
 - It cannot provide tamper-proof local forensics.
 - It cannot prove that quiet logs mean nothing happened.
-- It cannot provide complete socket forensics or network enforcement in the current alpha.
+- It cannot provide complete socket forensics or network enforcement in the current public beta.
 - It cannot enforce `network.allowed_destinations` yet; that field must be treated as non-blocking until a network enforcement backend exists.
 
 ## Protected Zones

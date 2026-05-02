@@ -5263,7 +5263,7 @@ fn receipt_limitations() -> Vec<&'static str> {
         "Protected-path reads are not blocked by default; only explicit read_deny = true or read_policy = \"deny\" zones with valid readable_roots use experimental Landlock read blocking. Read denial may break some agents.",
         warder_journal::file_visibility_contract(),
         warder_journal::network_visibility_contract(),
-        "Network policy is visibility-only in this alpha; allowed destinations are not enforced and quiet network journals are not proof of no egress.",
+        "Network policy is visibility-only in this public beta; allowed destinations are not enforced and quiet network journals are not proof of no egress.",
         "Receipts and the local SQLite journal are accountability records with a local hash chain; they are not tamper-proof forensics against a process that can modify Warder's state.",
     ]
 }

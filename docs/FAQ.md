@@ -16,7 +16,7 @@ Use `warder run --require-enforcement` when a session must not launch unless pro
 
 ## Can Warder stop network access?
 
-Not in the current alpha. Warder can record network observations where configured and supported, but network journaling is visibility, not complete network enforcement.
+Not in the current public beta. Warder can record network observations where configured and supported, but network journaling is visibility, not complete network enforcement.
 
 ## Is the desktop app required?
 

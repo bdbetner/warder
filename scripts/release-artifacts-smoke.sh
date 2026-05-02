@@ -14,11 +14,11 @@ mkdir -p "$TARGET_DIR" "$DEB_DIR" "$APPIMAGE_DIR" "$RPM_DIR"
 
 printf 'cli-binary\n' > "$TARGET_DIR/warder"
 printf 'desktop-binary\n' > "$TARGET_DIR/warder-desktop"
-printf 'deb-package\n' > "$DEB_DIR/warder_0.1.0_amd64.deb"
-printf 'appimage-package\n' > "$APPIMAGE_DIR/Warder_0.1.0_amd64.AppImage"
-printf 'rpm-package\n' > "$RPM_DIR/Warder-0.1.0-1.x86_64.rpm"
+printf 'deb-package\n' > "$DEB_DIR/Warder_1.0.0-beta.1_amd64.deb"
+printf 'appimage-package\n' > "$APPIMAGE_DIR/Warder_1.0.0-beta.1_amd64.AppImage"
+printf 'rpm-package\n' > "$RPM_DIR/Warder-1.0.0-beta.1-1.x86_64.rpm"
 chmod +x "$TARGET_DIR/warder" "$TARGET_DIR/warder-desktop"
-chmod +x "$APPIMAGE_DIR/Warder_0.1.0_amd64.AppImage"
+chmod +x "$APPIMAGE_DIR/Warder_1.0.0-beta.1_amd64.AppImage"
 
 "$ROOT_DIR/scripts/collect-release-artifacts.sh" \
   --target-dir "$TARGET_DIR" \
@@ -26,14 +26,14 @@ chmod +x "$APPIMAGE_DIR/Warder_0.1.0_amd64.AppImage"
   --deb-dir "$DEB_DIR" \
   --appimage-dir "$APPIMAGE_DIR" \
   --rpm-dir "$RPM_DIR" \
-  --version 'v0.1.0-alpha.2+"quoted"' \
+  --version 'v1.0.0-beta.1+"quoted"' \
   --commit 'abc123\def456'
 
 test -x "$ARTIFACT_DIR/warder"
 test -x "$ARTIFACT_DIR/warder-desktop"
-test -f "$ARTIFACT_DIR/warder_0.1.0_amd64.deb"
-test -x "$ARTIFACT_DIR/Warder_0.1.0_amd64.AppImage"
-test -f "$ARTIFACT_DIR/Warder-0.1.0-1.x86_64.rpm"
+test -f "$ARTIFACT_DIR/Warder_1.0.0-beta.1_amd64.deb"
+test -x "$ARTIFACT_DIR/Warder_1.0.0-beta.1_amd64.AppImage"
+test -f "$ARTIFACT_DIR/Warder-1.0.0-beta.1-1.x86_64.rpm"
 test -f "$ARTIFACT_DIR/SHA256SUMS"
 test -f "$ARTIFACT_DIR/release-manifest.json"
 
@@ -52,17 +52,17 @@ if ! grep -q "  warder-desktop$" "$ARTIFACT_DIR/SHA256SUMS"; then
   exit 1
 fi
 
-if ! grep -q "  warder_0.1.0_amd64.deb$" "$ARTIFACT_DIR/SHA256SUMS"; then
+if ! grep -q "  Warder_1.0.0-beta.1_amd64.deb$" "$ARTIFACT_DIR/SHA256SUMS"; then
   echo "expected checksum entry for Warder .deb package" >&2
   exit 1
 fi
 
-if ! grep -q "  Warder_0.1.0_amd64.AppImage$" "$ARTIFACT_DIR/SHA256SUMS"; then
+if ! grep -q "  Warder_1.0.0-beta.1_amd64.AppImage$" "$ARTIFACT_DIR/SHA256SUMS"; then
   echo "expected checksum entry for Warder AppImage package" >&2
   exit 1
 fi
 
-if ! grep -q "  Warder-0.1.0-1.x86_64.rpm$" "$ARTIFACT_DIR/SHA256SUMS"; then
+if ! grep -q "  Warder-1.0.0-beta.1-1.x86_64.rpm$" "$ARTIFACT_DIR/SHA256SUMS"; then
   echo "expected checksum entry for Warder RPM package" >&2
   exit 1
 fi
@@ -86,9 +86,9 @@ manifest = json.loads((artifact_dir / "release-manifest.json").read_text())
 expected_names = {
     "warder",
     "warder-desktop",
-    "warder_0.1.0_amd64.deb",
-    "Warder_0.1.0_amd64.AppImage",
-    "Warder-0.1.0-1.x86_64.rpm",
+    "Warder_1.0.0-beta.1_amd64.deb",
+    "Warder_1.0.0-beta.1_amd64.AppImage",
+    "Warder-1.0.0-beta.1-1.x86_64.rpm",
 }
 entries = manifest.get("artifacts", [])
 names = {entry.get("name") for entry in entries}
@@ -115,7 +115,7 @@ if ! grep -q '"target": "linux-x86_64"' "$ARTIFACT_DIR/release-manifest.json"; t
   exit 1
 fi
 
-for artifact in warder warder-desktop warder_0.1.0_amd64.deb Warder_0.1.0_amd64.AppImage Warder-0.1.0-1.x86_64.rpm; do
+for artifact in warder warder-desktop Warder_1.0.0-beta.1_amd64.deb Warder_1.0.0-beta.1_amd64.AppImage Warder-1.0.0-beta.1-1.x86_64.rpm; do
   if ! grep -q "\"name\": \"$artifact\"" "$ARTIFACT_DIR/release-manifest.json"; then
     echo "expected release manifest entry for $artifact" >&2
     exit 1

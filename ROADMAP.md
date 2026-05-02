@@ -20,7 +20,7 @@ These review-driven items are implemented and should remain protected by tests:
 - Use random session ids for local receipt/session identifiers.
 - Unify path canonicalization and traversal handling across config validation, policy decisions, and Landlock enforcement planning.
 - Keep pre-exec cgroup tagging covered for Warder-launched sessions.
-- Warn clearly when `network.allowed_destinations` is configured, because destination policy is not enforced in the current alpha.
+- Warn clearly when `network.allowed_destinations` is configured, because destination policy is not enforced in the current public beta.
 - Use stable user-scoped XDG state paths by default instead of per-working-directory `.warder` paths.
 - Cover symlink/traversal paths, snapshot restore inputs, concurrent DB access, degraded hosts, and journal blind spots with focused tests.
 

@@ -1,6 +1,6 @@
 # Alpha Scope
 
-Warder's current alpha is a Linux tool a user can install and test quickly: declare protected zones, run a local agent command through Warder, inspect a readable receipt afterward, see what protections degraded, and recover with snapshots where supported.
+Warder's current public beta is a Linux tool a user can install and test quickly: declare protected zones, run a local agent command through Warder, inspect a readable receipt afterward, see what protections degraded, and recover with snapshots where supported.
 
 ## Included
 
@@ -22,7 +22,7 @@ Warder's current alpha is a Linux tool a user can install and test quickly: decl
 - Live Btrfs snapshot creation and guarded Btrfs restore for missing target paths.
 - Network egress journal storage/readback and receipt summaries for persisted events.
 - SQLite metadata for config state, sessions, snapshots, and journals.
-- `.deb`, RPM, AppImage, checksum, and release-manifest artifacts for alpha releases.
+- `.deb`, RPM, AppImage, checksum, and release-manifest artifacts for public beta releases.
 
 ## Optional Or Experimental
 
