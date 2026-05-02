@@ -110,3 +110,16 @@ CREATE TABLE IF NOT EXISTS network_journal_events (
 
 CREATE INDEX IF NOT EXISTS idx_network_journal_events_session_timestamp
 ON network_journal_events(session_id, timestamp, id);
+
+CREATE TABLE IF NOT EXISTS session_integrity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    event_kind TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    previous_hash TEXT NOT NULL,
+    entry_hash TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_integrity_log_session_id
+ON session_integrity_log(session_id, id);

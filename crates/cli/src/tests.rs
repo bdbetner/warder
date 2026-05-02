@@ -431,7 +431,7 @@ fn usage_centers_no_daemon_run_workflow() {
             "recovery: warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]"
         ));
     assert!(usage.contains(
-            "inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>] [--verify-signature <hex>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status"
+            "inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>|--receipt-key <path>] [--verify-signature <hex>] | warder verify-receipts [--db <path>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status"
         ));
     assert!(usage.contains("daemon optional"));
 }
@@ -764,6 +764,28 @@ fn parses_receipt_command_with_signing_options() {
 }
 
 #[test]
+fn parses_receipt_command_with_external_receipt_key_alias() {
+    assert_eq!(
+        parse_args([
+            "warder",
+            "receipt",
+            "--session",
+            "session-1",
+            "--receipt-key",
+            "/run/warder-key",
+        ])
+        .unwrap(),
+        CliCommand::Receipt {
+            db: None,
+            session_id: "session-1".to_string(),
+            format: ReceiptFormat::Text,
+            signing_key_file: Some(PathBuf::from("/run/warder-key")),
+            verify_signature: None,
+        }
+    );
+}
+
+#[test]
 fn parses_receipt_key_init_command() {
     assert_eq!(
         parse_args([
@@ -778,6 +800,16 @@ fn parses_receipt_key_init_command() {
         CliCommand::ReceiptKey {
             output: PathBuf::from("/tmp/warder.key"),
             force: true,
+        }
+    );
+}
+
+#[test]
+fn parses_verify_receipts_command() {
+    assert_eq!(
+        parse_args(["warder", "verify-receipts", "--db", "/tmp/warder.sqlite3",]).unwrap(),
+        CliCommand::VerifyReceipts {
+            db: Some(PathBuf::from("/tmp/warder.sqlite3")),
         }
     );
 }
@@ -4470,6 +4502,22 @@ fn render_session_receipt_from_db_rejects_bad_signature() {
 
     let _ = std::fs::remove_file(db_path);
     let _ = std::fs::remove_file(key_path);
+}
+
+#[test]
+fn render_receipt_integrity_report_accepts_valid_hash_chain() {
+    let db_path = temp_file("warder-cli-receipt-integrity-db", "sqlite3");
+    let db = WarderDb::open(&db_path).unwrap();
+    db.migrate().unwrap();
+    db.create_session(&receipt_test_session()).unwrap();
+
+    let report = render_receipt_integrity_report(Some(db_path.clone())).unwrap();
+
+    assert!(report.contains("receipt integrity: ok"));
+    assert!(report.contains("sessions checked: 1"));
+    assert!(report.contains("integrity log entries: 1"));
+
+    let _ = std::fs::remove_file(db_path);
 }
 
 #[test]

@@ -12,6 +12,7 @@ The first engineering passes focused on defects that were concrete, local, and t
 - Path canonicalization and traversal handling now have focused tests across config, policy, snapshot, and Landlock planning.
 - Config validation rejects Landlock writable roots that overlap write-denied protected zones and warns when writable roots are ignored because Landlock is disabled.
 - Live eBPF records now include kernel cgroup ids and attach broader fd-write, writable-mmap, file-copy, and socket-fd tracepoints, while receipts still state that unresolved fd/mmap observations are visibility-only.
+- SQLite uses WAL with full synchronous durability for Warder connections, and session records have a local Merkle-style hash chain with `warder verify-receipts` fail-closed verification.
 - The cgroup spawn/tag attribution race is reported in receipts; true pre-spawn placement remains a future launcher/helper.
 
 The product-completion pass is now in alpha review. The next security pass should focus on issues that need deeper design or privileged-host evidence: true pre-spawn cgroup placement, broader live-journal coverage, public-key or external receipt attestation, optional seccomp/capability boundaries, and daemon coordination only if a tested workflow requires it.
@@ -45,7 +46,7 @@ The product-completion pass is now in alpha review. The next security pass shoul
 - The cgroup race does not mean Landlock is installed after the child starts; Landlock setup is in the child setup path. The unresolved risk is process attribution and journal coverage before cgroup tagging.
 - eBPF is intentionally observation-only today. The bug is any UI, config, or receipt wording that implies observation equals blocking.
 - Expanding eBPF to broad syscall, LSM, or cgroup-map coverage is not a small bug fix. Treat it as a privileged-host observability project with its own design and validation matrix.
-- Local HMAC receipt signing should remain optional in alpha. Requiring a key for every receipt would make basic receipt review fragile; the correct current behavior is to fail closed only when signing or verification is explicitly requested.
+- Local HMAC receipt signing should remain optional in alpha. Requiring a key for every receipt would make basic receipt review fragile; the correct current behavior is to fail closed only when signing, signature verification, or local receipt-chain verification is explicitly requested.
 - `cargo audit --deny warnings` is not yet a practical CI gate because Tauri's Linux desktop stack currently pulls transitive RustSec warnings for unmaintained GTK3/WebKit-adjacent crates. Keep the vulnerability scan, document the warning debt, and reassess when the upstream stack has a migration path.
 - Capability dropping, seccomp, stronger public-key receipt signing, reproducible builds, and GPG signatures are worthwhile future work after the narrower correctness fixes.
 

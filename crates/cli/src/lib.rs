@@ -87,6 +87,9 @@ pub enum CliCommand {
         output: PathBuf,
         force: bool,
     },
+    VerifyReceipts {
+        db: Option<PathBuf>,
+    },
     Snapshot {
         session_id: String,
         config: Option<PathBuf>,
@@ -256,6 +259,7 @@ where
         "journal" => parse_journal(args),
         "receipt" => parse_receipt(args),
         "receipt-key" => parse_receipt_key(args),
+        "verify-receipts" => parse_verify_receipts(args),
         "snapshot" => parse_snapshot(args),
         "revert" => parse_revert(args),
         "explain" => parse_required_value(args, "--config").map(|config| CliCommand::Explain {
@@ -403,6 +407,12 @@ pub fn command_summary(command: &CliCommand) -> String {
             output.display(),
             if *force { " with overwrite" } else { "" }
         ),
+        CliCommand::VerifyReceipts { db: Some(db) } => {
+            format!("receipt integrity verification requested for '{}'", db.display())
+        }
+        CliCommand::VerifyReceipts { db: None } => {
+            "receipt integrity verification requested".to_string()
+        }
         CliCommand::Snapshot {
             session_id,
             config: Some(config),
@@ -1408,6 +1418,34 @@ pub fn render_session_receipt_from_db_with_options(
     )
 }
 
+pub fn render_receipt_integrity_report(db_path: Option<PathBuf>) -> Result<String, CliError> {
+    let db_path = db_path.unwrap_or_else(default_db_path);
+    let db = WarderDb::open(&db_path).map_err(db_error)?;
+    db.migrate().map_err(db_error)?;
+    let report = db.verify_receipt_integrity().map_err(db_error)?;
+    if !report.is_valid() {
+        let mut lines = vec![format!(
+            "receipt integrity verification failed for '{}'",
+            db_path.display()
+        )];
+        lines.push(format!("sessions checked: {}", report.verified_sessions));
+        lines.push(format!("integrity log entries: {}", report.log_entries));
+        lines.push("issues:".to_string());
+        for issue in report.issues {
+            let session = issue.session_id.unwrap_or_else(|| "global".to_string());
+            lines.push(format!("- {session}: {}", issue.message));
+        }
+        return err(lines.join("\n"));
+    }
+
+    Ok(format!(
+        "receipt integrity: ok\nsessions checked: {}\nintegrity log entries: {}\ndatabase: {}",
+        report.verified_sessions,
+        report.log_entries,
+        db_path.display()
+    ))
+}
+
 fn render_receipt_output(
     session: &SessionRecord,
     file_events: &[FileJournalEvent],
@@ -2042,7 +2080,7 @@ init: warder init --protected-path <path> [--output <path>] [--profile <id>] [--
 profiles: warder profiles [--format text|json]\n\
 snapshot: warder snapshot --config <path> --session <id> --snapshot-root <path>\n\
 recovery: warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]\n\
-inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>] [--verify-signature <hex>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status\n\
+inspect: warder receipt [--db <path>] --session <id> [--format text|json] [--signing-key-file <path>|--receipt-key <path>] [--verify-signature <hex>] | warder verify-receipts [--db <path>] | warder journal [--db <path>] [--file|--network|--all] [--session <id>] | warder status\n\
 keys: warder receipt-key init [--output <path>] [--force]\n\
 daemon optional: warder start|stop"
 }
@@ -2648,11 +2686,11 @@ fn parse_receipt(args: Vec<String>) -> Result<CliCommand, CliError> {
                 format = parse_receipt_format(&value_after(&args, index, "--format")?)?;
                 index += 2;
             }
-            "--signing-key-file" => {
+            "--signing-key-file" | "--receipt-key" => {
                 signing_key_file = Some(PathBuf::from(value_after(
                     &args,
                     index,
-                    "--signing-key-file",
+                    args[index].as_str(),
                 )?));
                 index += 2;
             }
@@ -2703,6 +2741,21 @@ fn parse_receipt_key(args: Vec<String>) -> Result<CliCommand, CliError> {
     }
 
     Ok(CliCommand::ReceiptKey { output, force })
+}
+
+fn parse_verify_receipts(args: Vec<String>) -> Result<CliCommand, CliError> {
+    let mut db = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--db" => {
+                db = Some(PathBuf::from(value_after(&args, index, "--db")?));
+                index += 2;
+            }
+            unknown => return err(format!("unknown verify-receipts option '{unknown}'")),
+        }
+    }
+    Ok(CliCommand::VerifyReceipts { db })
 }
 
 fn parse_profiles(args: Vec<String>) -> Result<CliCommand, CliError> {
@@ -5035,7 +5088,7 @@ fn receipt_limitations() -> Vec<&'static str> {
         warder_journal::file_visibility_contract(),
         warder_journal::network_visibility_contract(),
         "Network policy is visibility-only in this alpha; allowed destinations are not enforced and quiet network journals are not proof of no egress.",
-        "Receipts and the local SQLite journal are accountability records, not tamper-proof forensics or append-only evidence.",
+        "Receipts and the local SQLite journal are accountability records with a local hash chain; they are not tamper-proof forensics against a process that can modify Warder's state.",
     ]
 }
 

@@ -29,9 +29,9 @@ Expected degraded cases include missing cgroup delegation, unavailable Landlock 
 
 Warder stores local metadata in SQLite. Warder should not upload session data or call external services as part of the core supervision path.
 
-Local receipts and journals are accountability records, not tamper-proof forensics. A local user or malware with filesystem access can modify local files.
+Local receipts and journals are accountability records, not tamper-proof forensics. Warder keeps a local SQLite hash chain for session records and `warder verify-receipts` fails closed when that chain is missing or inconsistent, but a local user or malware with write access to Warder's state can still modify both records and integrity metadata.
 
-Receipt signing can add local HMAC integrity checks for exported receipts when the signing key is kept outside the supervised session's write access. It does not make Warder state tamper-proof, and it is not a public-key non-repudiation mechanism. Until stronger state-file controls and key management are implemented, do not use Warder receipts as forensic evidence against a process that could also modify Warder's local state directory or receipt signing key.
+Receipt signing can add local HMAC integrity checks for exported receipts when the signing key is kept outside the supervised session's write access. It does not make Warder state tamper-proof, and it is not a public-key non-repudiation mechanism. Until stronger state-file controls and external key management are implemented, do not use Warder receipts as forensic evidence against a process that could also modify Warder's local state directory or receipt signing key.
 
 ## Before Relying On Warder
 

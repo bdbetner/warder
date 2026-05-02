@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -25,6 +26,36 @@ pub enum DbError {
     InvalidTimestamp(i64),
     InvalidValue { field: &'static str, value: String },
     MissingSession(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReceiptIntegrityReport {
+    pub verified_sessions: usize,
+    pub log_entries: usize,
+    pub issues: Vec<ReceiptIntegrityIssue>,
+}
+
+impl ReceiptIntegrityReport {
+    pub fn is_valid(&self) -> bool {
+        self.issues.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReceiptIntegrityIssue {
+    pub session_id: Option<String>,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SessionIntegrityEntry {
+    id: i64,
+    session_id: String,
+    event_kind: String,
+    payload_hash: String,
+    previous_hash: String,
+    entry_hash: String,
+    created_at: i64,
 }
 
 impl From<rusqlite::Error> for DbError {
@@ -57,6 +88,7 @@ impl WarderDb {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.busy_timeout(Duration::from_secs(5))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "FULL")?;
         set_db_file_permissions(path)?;
         Ok(Self { conn })
     }
@@ -106,6 +138,75 @@ impl WarderDb {
             [],
         )?;
         Ok(())
+    }
+
+    fn append_session_integrity_event(
+        &self,
+        event_kind: &'static str,
+        session: &SessionRecord,
+    ) -> DbResult<()> {
+        let previous_hash = self
+            .latest_integrity_entry_hash()?
+            .unwrap_or_else(genesis_integrity_hash);
+        let payload_hash = session_payload_hash(session)?;
+        let created_at = encode_time(SystemTime::now());
+        let entry_hash = integrity_entry_hash(
+            &previous_hash,
+            &session.id,
+            event_kind,
+            &payload_hash,
+            created_at,
+        );
+        self.conn.execute(
+            "INSERT INTO session_integrity_log (
+                session_id, event_kind, payload_hash, previous_hash, entry_hash, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                session.id,
+                event_kind,
+                payload_hash,
+                previous_hash,
+                entry_hash,
+                created_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn latest_integrity_entry_hash(&self) -> DbResult<Option<String>> {
+        let mut statement = self.conn.prepare(
+            "SELECT entry_hash
+             FROM session_integrity_log
+             ORDER BY id DESC
+             LIMIT 1",
+        )?;
+        let mut rows = statement.query([])?;
+        rows.next()?
+            .map(|row| row.get(0))
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    fn session_integrity_entries(&self) -> DbResult<Vec<SessionIntegrityEntry>> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, session_id, event_kind, payload_hash, previous_hash, entry_hash, created_at
+             FROM session_integrity_log
+             ORDER BY id",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut entries = Vec::new();
+        while let Some(row) = rows.next()? {
+            entries.push(SessionIntegrityEntry {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                event_kind: row.get(2)?,
+                payload_hash: row.get(3)?,
+                previous_hash: row.get(4)?,
+                entry_hash: row.get(5)?,
+                created_at: row.get(6)?,
+            });
+        }
+        Ok(entries)
     }
 
     pub fn table_exists(&self, table_name: &str) -> DbResult<bool> {
@@ -264,6 +365,7 @@ impl WarderDb {
                 encode_dependency_file_changes(&session.dependency_file_changes)?,
             ],
         )?;
+        self.append_session_integrity_event("create", session)?;
         Ok(())
     }
 
@@ -329,6 +431,7 @@ impl WarderDb {
         if changed == 0 {
             return Err(DbError::MissingSession(session.id.clone()));
         }
+        self.append_session_integrity_event("update", session)?;
         Ok(())
     }
 
@@ -360,6 +463,64 @@ impl WarderDb {
             sessions.push(read_session(row)?);
         }
         Ok(sessions)
+    }
+
+    pub fn verify_receipt_integrity(&self) -> DbResult<ReceiptIntegrityReport> {
+        let sessions = self.list_sessions()?;
+        let mut rows = self.session_integrity_entries()?;
+        rows.sort_by_key(|row| row.id);
+
+        let mut issues = Vec::new();
+        let mut previous_hash = genesis_integrity_hash();
+        let mut latest_payload_by_session = std::collections::BTreeMap::<String, String>::new();
+        for row in &rows {
+            if row.previous_hash != previous_hash {
+                issues.push(ReceiptIntegrityIssue {
+                    session_id: Some(row.session_id.clone()),
+                    message: format!(
+                        "integrity entry {} has previous hash {}, expected {}",
+                        row.id, row.previous_hash, previous_hash
+                    ),
+                });
+            }
+            let expected_entry_hash = integrity_entry_hash(
+                &row.previous_hash,
+                &row.session_id,
+                &row.event_kind,
+                &row.payload_hash,
+                row.created_at,
+            );
+            if row.entry_hash != expected_entry_hash {
+                issues.push(ReceiptIntegrityIssue {
+                    session_id: Some(row.session_id.clone()),
+                    message: format!("integrity entry {} hash does not match its payload", row.id),
+                });
+            }
+            previous_hash = row.entry_hash.clone();
+            latest_payload_by_session.insert(row.session_id.clone(), row.payload_hash.clone());
+        }
+
+        for session in &sessions {
+            let payload_hash = session_payload_hash(session)?;
+            match latest_payload_by_session.get(&session.id) {
+                Some(logged_hash) if *logged_hash == payload_hash => {}
+                Some(_) => issues.push(ReceiptIntegrityIssue {
+                    session_id: Some(session.id.clone()),
+                    message: "current session record does not match latest integrity log entry"
+                        .to_string(),
+                }),
+                None => issues.push(ReceiptIntegrityIssue {
+                    session_id: Some(session.id.clone()),
+                    message: "session has no integrity log entry".to_string(),
+                }),
+            }
+        }
+
+        Ok(ReceiptIntegrityReport {
+            verified_sessions: sessions.len(),
+            log_entries: rows.len(),
+            issues,
+        })
     }
 
     pub fn create_policy_rule(&self, rule: &PolicyRule) -> DbResult<()> {
@@ -917,6 +1078,86 @@ fn encode_time(time: SystemTime) -> i64 {
 
 fn encode_optional_time(time: Option<SystemTime>) -> Option<i64> {
     time.map(encode_time)
+}
+
+fn session_payload_hash(session: &SessionRecord) -> DbResult<String> {
+    let (cgroup_status, cgroup_message) = encode_cgroup_status(&session.cgroup_status);
+    let (landlock_status, landlock_message) = encode_landlock_status(&session.landlock_status);
+    let (snapshot_status, snapshot_backend, snapshot_id, snapshot_root, snapshot_message) =
+        encode_snapshot_status(&session.snapshot_status);
+    let dependency_file_changes = session
+        .dependency_file_changes
+        .iter()
+        .map(|change| {
+            serde_json::json!({
+                "path": path_to_string(&change.path),
+                "before_hash": change.before_hash,
+                "after_hash": change.after_hash,
+                "status": dependency_file_change_status_to_str(change.status),
+            })
+        })
+        .collect::<Vec<_>>();
+    let payload = serde_json::json!({
+        "version": 1,
+        "id": session.id,
+        "agent_id": session.agent_id,
+        "agent_label": session.agent_label,
+        "agent_profile": session.agent_profile,
+        "command": session.command,
+        "protected_zone_ids": session.protected_zone_ids,
+        "status": session_status_to_str(session.status),
+        "exit_code": session.exit_code,
+        "started_at": encode_time(session.started_at),
+        "ended_at": encode_optional_time(session.ended_at),
+        "root_pid": session.root_pid,
+        "cgroup_path": session.cgroup_path.as_ref().map(|path| path_to_string(path)),
+        "cgroup_status": cgroup_status,
+        "cgroup_message": cgroup_message,
+        "landlock_status": landlock_status,
+        "landlock_message": landlock_message,
+        "snapshot_status": snapshot_status,
+        "snapshot_backend": snapshot_backend,
+        "snapshot_id": snapshot_id,
+        "snapshot_root": snapshot_root,
+        "snapshot_message": snapshot_message,
+        "degraded_reasons": session.degraded_reasons,
+        "dependency_file_changes": dependency_file_changes,
+    });
+    Ok(hash_hex(&serde_json::to_vec(&payload)?))
+}
+
+fn genesis_integrity_hash() -> String {
+    hash_hex(b"warder-session-integrity-v1")
+}
+
+fn integrity_entry_hash(
+    previous_hash: &str,
+    session_id: &str,
+    event_kind: &str,
+    payload_hash: &str,
+    created_at: i64,
+) -> String {
+    hash_hex(
+        format!("{previous_hash}\n{session_id}\n{event_kind}\n{payload_hash}\n{created_at}")
+            .as_bytes(),
+    )
+}
+
+fn hash_hex(payload: &[u8]) -> String {
+    let digest = Sha256::digest(payload);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        hex.push(hex_nibble(byte >> 4));
+        hex.push(hex_nibble(byte));
+    }
+    hex
+}
+
+fn hex_nibble(value: u8) -> char {
+    match value & 0x0f {
+        0..=9 => (b'0' + (value & 0x0f)) as char,
+        value => (b'a' + (value - 10)) as char,
+    }
 }
 
 fn decode_time(seconds: i64) -> DbResult<SystemTime> {

@@ -224,6 +224,12 @@ fn main() {
                 Err(error) => exit_with_error(error),
             }
         }
+        Ok(warder_cli::CliCommand::VerifyReceipts { db }) => {
+            match warder_cli::render_receipt_integrity_report(db) {
+                Ok(report) => println!("{report}"),
+                Err(error) => exit_with_error(error),
+            }
+        }
         Ok(warder_cli::CliCommand::Snapshot {
             session_id,
             config: Some(config),

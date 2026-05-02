@@ -76,18 +76,23 @@ fn migrations_create_expected_tables() {
         "audit_events",
         "file_journal_events",
         "network_journal_events",
+        "session_integrity_log",
     ] {
         assert!(store.table_exists(table).unwrap(), "missing table {table}");
     }
 }
 
 #[test]
-fn open_configures_wal_and_busy_timeout() {
+fn open_configures_wal_full_sync_and_busy_timeout() {
     let store = WarderDb::open(temp_db_path("open-pragmas")).unwrap();
 
     let journal_mode: String = store
         .conn
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .unwrap();
+    let synchronous: i64 = store
+        .conn
+        .query_row("PRAGMA synchronous", [], |row| row.get(0))
         .unwrap();
     let busy_timeout: i64 = store
         .conn
@@ -95,6 +100,7 @@ fn open_configures_wal_and_busy_timeout() {
         .unwrap();
 
     assert_eq!(journal_mode, "wal");
+    assert_eq!(synchronous, 2);
     assert_eq!(busy_timeout, 5000);
 }
 
@@ -227,6 +233,117 @@ fn sessions_round_trip_with_cgroup_and_snapshot_state() {
     store.update_session(&session).unwrap();
 
     assert_eq!(store.get_session(&session.id).unwrap(), Some(session));
+}
+
+#[test]
+fn session_integrity_log_verifies_created_and_updated_sessions() {
+    let store = store("session-integrity-valid");
+    let mut session = SessionRecord {
+        id: "session-1".to_string(),
+        agent_id: "agent-1".to_string(),
+        agent_label: "Local Script".to_string(),
+        agent_profile: Some("generic-cli".to_string()),
+        command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+        protected_zone_ids: vec!["zone-1".to_string()],
+        status: SessionStatus::Recorded,
+        exit_code: None,
+        started_at: timestamp(),
+        ended_at: None,
+        root_pid: None,
+        cgroup_path: None,
+        cgroup_status: CgroupStatus::Pending,
+        landlock_status: warder_core::LandlockStatus::Pending,
+        snapshot_status: SnapshotStatus::NotRequested,
+        dependency_file_changes: Vec::new(),
+        degraded_reasons: Vec::new(),
+    };
+
+    store.create_session(&session).unwrap();
+    session.status = SessionStatus::Completed;
+    session.exit_code = Some(0);
+    store.update_session(&session).unwrap();
+
+    let report = store.verify_receipt_integrity().unwrap();
+
+    assert!(report.is_valid(), "{:?}", report.issues);
+    assert_eq!(report.verified_sessions, 1);
+    assert_eq!(report.log_entries, 2);
+}
+
+#[test]
+fn session_integrity_log_detects_direct_session_tampering() {
+    let store = store("session-integrity-tamper");
+    let session = SessionRecord {
+        id: "session-1".to_string(),
+        agent_id: "agent-1".to_string(),
+        agent_label: "Local Script".to_string(),
+        agent_profile: Some("generic-cli".to_string()),
+        command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+        protected_zone_ids: vec!["zone-1".to_string()],
+        status: SessionStatus::Recorded,
+        exit_code: None,
+        started_at: timestamp(),
+        ended_at: None,
+        root_pid: None,
+        cgroup_path: None,
+        cgroup_status: CgroupStatus::Pending,
+        landlock_status: warder_core::LandlockStatus::Pending,
+        snapshot_status: SnapshotStatus::NotRequested,
+        dependency_file_changes: Vec::new(),
+        degraded_reasons: Vec::new(),
+    };
+    store.create_session(&session).unwrap();
+    store
+        .conn
+        .execute(
+            "UPDATE sessions SET status = 'completed' WHERE id = ?1",
+            ["session-1"],
+        )
+        .unwrap();
+
+    let report = store.verify_receipt_integrity().unwrap();
+
+    assert!(!report.is_valid());
+    assert!(report.issues.iter().any(|issue| issue
+        .message
+        .contains("current session record does not match latest integrity log entry")));
+}
+
+#[test]
+fn session_integrity_log_fails_closed_when_log_is_missing() {
+    let store = store("session-integrity-missing");
+    let session = SessionRecord {
+        id: "session-1".to_string(),
+        agent_id: "agent-1".to_string(),
+        agent_label: "Local Script".to_string(),
+        agent_profile: Some("generic-cli".to_string()),
+        command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+        protected_zone_ids: vec!["zone-1".to_string()],
+        status: SessionStatus::Recorded,
+        exit_code: None,
+        started_at: timestamp(),
+        ended_at: None,
+        root_pid: None,
+        cgroup_path: None,
+        cgroup_status: CgroupStatus::Pending,
+        landlock_status: warder_core::LandlockStatus::Pending,
+        snapshot_status: SnapshotStatus::NotRequested,
+        dependency_file_changes: Vec::new(),
+        degraded_reasons: Vec::new(),
+    };
+    store.create_session(&session).unwrap();
+    store
+        .conn
+        .execute("DELETE FROM session_integrity_log", [])
+        .unwrap();
+
+    let report = store.verify_receipt_integrity().unwrap();
+
+    assert!(!report.is_valid());
+    assert!(report
+        .issues
+        .iter()
+        .any(|issue| issue.message.contains("session has no integrity log entry")));
 }
 
 #[test]
