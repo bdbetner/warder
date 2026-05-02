@@ -9,6 +9,7 @@ Warder is a Linux supervised-session safety layer for local agent sessions. Star
 - [Reviewer Feedback Guide](reviewer-feedback.md): release-artifact demo path and feedback checklist.
 - [Prototype Demo](prototype-demo.md): run the source-checkout demo flow.
 - [Protected Zones](protected-zones.md): choose what Warder should protect.
+- [OpenClaw Support](openclaw-support.md): recommended way to run OpenClaw through Warder.
 - [Examples](examples/README.md): common protected-zone scenarios.
 - [FAQ](FAQ.md): short answers to common questions.
 
@@ -39,7 +40,7 @@ Warder is a Linux supervised-session safety layer for local agent sessions. Star
 - [Cgroup Setup](cgroup-setup.md): delegated cgroup setup for stronger process tagging.
 - [Landlock Demo](landlock-demo.md): local write-denial demo.
 - [eBPF File Journal](ebpf-file-journal.md): privileged file-journal setup.
-- [OpenClaw Integration](../integrations/openclaw/README.md): running OpenClaw through Warder.
+- [OpenClaw Integration](../integrations/openclaw/README.md): maintainer notes for OpenClaw-specific profile and preflight behavior.
 
 ## Maintainer Notes
 

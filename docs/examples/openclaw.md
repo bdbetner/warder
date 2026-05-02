@@ -2,6 +2,8 @@
 
 Use this when OpenClaw should run as a supervised local command instead of receiving raw filesystem access outside Warder.
 
+For the full guidance, including current OpenClaw release-note implications, see [OpenClaw Support](../openclaw-support.md).
+
 Warder does not replace OpenClaw's own gateway, channel, tool, sandbox, or elevated-exec policy. It adds the host-side session record around the OpenClaw process: protected zones, cgroup identity where available, Landlock enforcement where supported, file/network journals, snapshots where supported, and a receipt.
 
 ## Choose A Profile

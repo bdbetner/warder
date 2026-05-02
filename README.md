@@ -21,6 +21,7 @@ The first goal is practical: keep permissive local agent workflows fast while ma
 - Installing a release build: read [Install Notes](docs/install.md), [Linux Compatibility](docs/linux-compatibility.md), and [Release Trust Model](docs/release-trust.md).
 - Reviewing Warder: read [Reviewer Feedback Guide](docs/reviewer-feedback.md).
 - Evaluating the safety model: read [Security Model](docs/security-model.md) and [Threat Model](THREAT_MODEL.md).
+- Running OpenClaw: read [OpenClaw Support](docs/openclaw-support.md).
 - Looking for the project direction: read [Product Overview](PRODUCT_SPEC.md), [Vision](docs/vision.md), and [Roadmap](ROADMAP.md).
 - Looking for common scenarios: read [Examples](docs/examples/README.md) and [FAQ](docs/FAQ.md).
 
@@ -166,6 +167,18 @@ The text version of this example lives at [docs/examples/sample-receipt.txt](doc
 - [Give an agent read-only access to notes](docs/examples/readonly-notes.md)
 - [Run risky project edits with snapshots](docs/examples/snapshot-project.md)
 - [Run OpenClaw through Warder](docs/examples/openclaw.md)
+
+## OpenClaw Support
+
+OpenClaw is one of Warder's primary supported agent workflows. Warder does not replace OpenClaw's Gateway auth, channel routing, tool allow/deny rules, elevated-exec gates, memory, plugins, or sandbox backends. It adds an outer Linux supervised-session layer around the OpenClaw process that Warder launches.
+
+Use Warder for OpenClaw when you want protected zones, host readiness checks, optional snapshots, file/network journals, and receipts around:
+
+- `openclaw agent --message ...`
+- `openclaw gateway`
+- generic OpenClaw CLI commands that may touch local state
+
+Start with [OpenClaw Support](docs/openclaw-support.md). The short example page remains at [Run OpenClaw through Warder](docs/examples/openclaw.md), and maintainer integration notes live at [integrations/openclaw](integrations/openclaw/README.md).
 
 ## Security Model
 

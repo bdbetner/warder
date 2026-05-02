@@ -1,5 +1,7 @@
 # OpenClaw Integration
 
+User-facing setup guidance lives in [OpenClaw Support](../../docs/openclaw-support.md). This page is the narrower maintainer/integration note.
+
 Warder can supervise OpenClaw the same way it supervises any other local agent command: launch it through `warder run` with a named agent label and explicit protected-zone config.
 
 ```bash
