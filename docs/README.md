@@ -30,6 +30,7 @@ Warder is an alpha Linux safety tool for supervised local agent sessions. Start 
 - [Alpha Scope](../MVP_SCOPE.md): what the current alpha includes and excludes.
 - [Architecture](architecture.md): crate layout and session flow.
 - [Journals](audit-log.md): what receipts and journals can show.
+- [Journal Coverage](journal-coverage.md): exact file/network journal surfaces and blind spots.
 
 ## Integration Notes
 

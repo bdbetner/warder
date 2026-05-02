@@ -11,6 +11,7 @@ The first engineering passes focused on defects that were concrete, local, and t
 - `network.allowed_destinations` is reported as non-enforcing metadata until a blocking backend exists.
 - Path canonicalization and traversal handling now have focused tests across config, policy, snapshot, and Landlock planning.
 - Config validation rejects Landlock writable roots that overlap write-denied protected zones and warns when writable roots are ignored because Landlock is disabled.
+- Live eBPF records now include kernel cgroup ids and attach broader fd-write, writable-mmap, file-copy, and socket-fd tracepoints, while receipts still state that unresolved fd/mmap observations are visibility-only.
 - The cgroup spawn/tag attribution race is reported in receipts; true pre-spawn placement remains a future launcher/helper.
 
 The product-completion pass is now in alpha review. The next security pass should focus on issues that need deeper design or privileged-host evidence: true pre-spawn cgroup placement, broader live-journal coverage, public-key or external receipt attestation, optional seccomp/capability boundaries, and daemon coordination only if a tested workflow requires it.

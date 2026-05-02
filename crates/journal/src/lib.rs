@@ -46,6 +46,7 @@ pub struct LandlockDeniedEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EbpfFileAccessEvent {
     pub process_id: Option<u32>,
+    pub cgroup_id: Option<u64>,
     pub path: PathBuf,
     pub operation: FileOperation,
     pub denied: bool,
@@ -70,6 +71,7 @@ pub struct NetworkJournalEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EbpfNetworkEgressEvent {
     pub process_id: Option<u32>,
+    pub cgroup_id: Option<u64>,
     pub destination: String,
     pub destination_port: Option<u16>,
     pub protocol: NetworkProtocol,
@@ -121,6 +123,17 @@ pub fn default_ebpf_file_tracepoints() -> &'static [(&'static str, &'static str)
         ("warder_file_openat2", "sys_enter_openat2"),
         ("warder_file_creat", "sys_enter_creat"),
         ("warder_file_truncate", "sys_enter_truncate"),
+        ("warder_file_ftruncate", "sys_enter_ftruncate"),
+        ("warder_file_write", "sys_enter_write"),
+        ("warder_file_writev", "sys_enter_writev"),
+        ("warder_file_pwrite64", "sys_enter_pwrite64"),
+        ("warder_file_pwritev", "sys_enter_pwritev"),
+        ("warder_file_pwritev2", "sys_enter_pwritev2"),
+        ("warder_file_mmap", "sys_enter_mmap"),
+        ("warder_file_mprotect", "sys_enter_mprotect"),
+        ("warder_file_sendfile", "sys_enter_sendfile"),
+        ("warder_file_splice", "sys_enter_splice"),
+        ("warder_file_copy_file_range", "sys_enter_copy_file_range"),
         ("warder_file_rename", "sys_enter_rename"),
         ("warder_file_renameat", "sys_enter_renameat"),
         ("warder_file_renameat2", "sys_enter_renameat2"),
@@ -134,6 +147,18 @@ pub fn default_ebpf_file_tracepoints() -> &'static [(&'static str, &'static str)
         ("warder_file_mkdirat", "sys_enter_mkdirat"),
         ("warder_file_mknod", "sys_enter_mknod"),
         ("warder_file_mknodat", "sys_enter_mknodat"),
+    ]
+}
+
+pub fn default_ebpf_network_tracepoints() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("warder_network_egress", "sys_enter_connect"),
+        ("warder_network_sendto", "sys_enter_sendto"),
+        ("warder_network_send", "sys_enter_send"),
+        ("warder_network_sendmsg", "sys_enter_sendmsg"),
+        ("warder_network_sendmmsg", "sys_enter_sendmmsg"),
+        ("warder_network_sendfile", "sys_enter_sendfile"),
+        ("warder_network_splice", "sys_enter_splice"),
     ]
 }
 
@@ -350,13 +375,14 @@ pub const EBPF_FILE_OPERATION_CREATE: u8 = 3;
 pub const EBPF_FILE_OPERATION_DELETE: u8 = 4;
 pub const EBPF_FILE_OPERATION_RENAME: u8 = 5;
 pub const EBPF_FILE_ACCESS_PATH_BYTES: usize = 256;
-pub const EBPF_FILE_ACCESS_RECORD_SIZE: usize = 4 + 1 + 1 + 8 + EBPF_FILE_ACCESS_PATH_BYTES;
+pub const EBPF_FILE_ACCESS_RECORD_SIZE: usize = 4 + 1 + 1 + 8 + 8 + EBPF_FILE_ACCESS_PATH_BYTES;
 pub const EBPF_NETWORK_PROTOCOL_TCP: u8 = 1;
 pub const EBPF_NETWORK_PROTOCOL_UDP: u8 = 2;
 pub const EBPF_NETWORK_PROTOCOL_ICMP: u8 = 3;
+pub const EBPF_NETWORK_PROTOCOL_SOCKET_FD: u8 = 4;
 pub const EBPF_NETWORK_DESTINATION_BYTES: usize = 64;
 pub const EBPF_NETWORK_EGRESS_RECORD_SIZE: usize =
-    4 + 1 + 1 + 2 + 8 + EBPF_NETWORK_DESTINATION_BYTES;
+    4 + 1 + 1 + 2 + 8 + 8 + EBPF_NETWORK_DESTINATION_BYTES;
 
 pub fn render_file_journal_summary(events: &[FileJournalEvent]) -> String {
     if events.is_empty() {
@@ -470,7 +496,11 @@ pub fn render_network_journal_summary(events: &[NetworkJournalEvent]) -> String 
 }
 
 pub fn network_visibility_contract() -> &'static str {
-    "limited to observed TCP connect(2) and UDP sendto(2)/sendmsg(2)/sendmmsg(2) attempts when live eBPF network journaling is attached, plus connected socket snapshots from procfs during supervised runs; not complete socket forensics or enforcement"
+    "limited to observed TCP connect(2), UDP sendto(2)/sendmsg(2)/sendmmsg(2), socket send(2), and socket-like sendfile(2)/splice(2) fd activity when live eBPF network journaling is attached, plus connected socket snapshots from procfs during supervised runs; not complete socket forensics or enforcement"
+}
+
+pub fn file_visibility_contract() -> &'static str {
+    "limited to inotify protected-path changes plus live eBPF observations of common path syscalls, fd writes, ftruncate(2), writable mmap(2)/mprotect(2), sendfile(2), splice(2), and copy_file_range(2) when attached; fd and mmap observations may not resolve back to protected paths and remain visibility-only, not enforcement"
 }
 
 fn render_count_summary(labels: impl Iterator<Item = String>) -> String {
@@ -721,10 +751,12 @@ pub fn decode_ebpf_file_access_record(
     let denied = record[5] != 0;
     let timestamp_nanos =
         u64::from_ne_bytes(read_record_bytes(record, 6..14, "file-access timestamp")?);
-    let path = decode_ebpf_file_access_path(&record[14..14 + EBPF_FILE_ACCESS_PATH_BYTES])?;
+    let cgroup_id = u64::from_ne_bytes(read_record_bytes(record, 14..22, "file-access cgroup id")?);
+    let path = decode_ebpf_file_access_path(&record[22..22 + EBPF_FILE_ACCESS_PATH_BYTES])?;
 
     Ok(EbpfFileAccessEvent {
         process_id: (pid != 0).then_some(pid),
+        cgroup_id: (cgroup_id != 0).then_some(cgroup_id),
         path,
         operation,
         denied,
@@ -770,11 +802,17 @@ pub fn decode_ebpf_network_egress_record(
         8..16,
         "network-egress timestamp",
     )?);
+    let cgroup_id = u64::from_ne_bytes(read_record_bytes(
+        record,
+        16..24,
+        "network-egress cgroup id",
+    )?);
     let destination =
-        decode_ebpf_network_destination(&record[16..16 + EBPF_NETWORK_DESTINATION_BYTES])?;
+        decode_ebpf_network_destination(&record[24..24 + EBPF_NETWORK_DESTINATION_BYTES])?;
 
     Ok(EbpfNetworkEgressEvent {
         process_id: (pid != 0).then_some(pid),
+        cgroup_id: (cgroup_id != 0).then_some(cgroup_id),
         destination,
         destination_port: (destination_port != 0).then_some(destination_port),
         protocol,
@@ -1319,12 +1357,7 @@ impl AyaLiveEbpfNetworkEgressReader {
                 &tracepoint_name,
             )?;
         } else {
-            for (program_name, tracepoint_name) in [
-                ("warder_network_egress", "sys_enter_connect"),
-                ("warder_network_sendto", "sys_enter_sendto"),
-                ("warder_network_sendmsg", "sys_enter_sendmsg"),
-                ("warder_network_sendmmsg", "sys_enter_sendmmsg"),
-            ] {
+            for (program_name, tracepoint_name) in default_ebpf_network_tracepoints() {
                 attach_network_tracepoint(
                     &mut bpf,
                     &object_path,
@@ -1755,6 +1788,7 @@ fn decode_ebpf_network_protocol(protocol: u8) -> NetworkProtocol {
         EBPF_NETWORK_PROTOCOL_TCP => NetworkProtocol::Tcp,
         EBPF_NETWORK_PROTOCOL_UDP => NetworkProtocol::Udp,
         EBPF_NETWORK_PROTOCOL_ICMP => NetworkProtocol::Icmp,
+        EBPF_NETWORK_PROTOCOL_SOCKET_FD => NetworkProtocol::Other("socket-fd".to_string()),
         unknown => NetworkProtocol::Other(format!("protocol-{unknown}")),
     }
 }

@@ -14,6 +14,7 @@ typedef unsigned int __u32;
 typedef unsigned long long __u64;
 
 enum {
+    BPF_MAP_TYPE_ARRAY = 2,
     BPF_MAP_TYPE_PERF_EVENT_ARRAY = 4,
     BPF_F_CURRENT_CPU = 0xffffffffULL,
 };
@@ -21,6 +22,7 @@ enum {
 enum {
     WARDER_NETWORK_PROTOCOL_TCP = 1,
     WARDER_NETWORK_PROTOCOL_UDP = 2,
+    WARDER_NETWORK_PROTOCOL_SOCKET_FD = 4,
 };
 
 enum {
@@ -42,6 +44,7 @@ struct warder_network_egress_record {
     __u8 denied;
     __u16 destination_port;
     __u64 timestamp_nanos;
+    __u64 cgroup_id;
     char destination[64];
 } __attribute__((packed));
 
@@ -93,6 +96,44 @@ struct sys_enter_sendmmsg_ctx {
     long flags;
 };
 
+struct sys_enter_send_ctx {
+    __u16 common_type;
+    __u8 common_flags;
+    __u8 common_preempt_count;
+    int common_pid;
+    int syscall_nr;
+    long fd;
+    const void *buff;
+    long len;
+    long flags;
+};
+
+struct sys_enter_sendfile_ctx {
+    __u16 common_type;
+    __u8 common_flags;
+    __u8 common_preempt_count;
+    int common_pid;
+    int syscall_nr;
+    long out_fd;
+    long in_fd;
+    const void *offset;
+    long count;
+};
+
+struct sys_enter_splice_ctx {
+    __u16 common_type;
+    __u8 common_flags;
+    __u8 common_preempt_count;
+    int common_pid;
+    int syscall_nr;
+    long fd_in;
+    const void *off_in;
+    long fd_out;
+    const void *off_out;
+    long len;
+    unsigned int flags;
+};
+
 struct warder_sockaddr_in {
     __u16 family;
     __u16 port;
@@ -131,8 +172,19 @@ struct bpf_map_def EVENTS = {
     .map_flags = 0,
 };
 
+SEC("maps")
+struct bpf_map_def CGROUP_FILTER = {
+    .type = BPF_MAP_TYPE_ARRAY,
+    .key_size = sizeof(__u32),
+    .value_size = sizeof(__u64),
+    .max_entries = 1,
+    .map_flags = 0,
+};
+
+static void *(*bpf_map_lookup_elem)(void *map, const void *key) = (void *)1;
 static __u64 (*bpf_get_current_pid_tgid)(void) = (void *)14;
 static __u64 (*bpf_ktime_get_ns)(void) = (void *)5;
+static __u64 (*bpf_get_current_cgroup_id)(void) = (void *)80;
 static long (*bpf_probe_read_user)(void *dst, __u32 size, const void *unsafe_ptr) = (void *)112;
 static long (*bpf_perf_event_output)(void *ctx, void *map, __u64 flags, void *data, __u64 size) = (void *)25;
 
@@ -181,11 +233,59 @@ static void warder_write_ipv6_hex(char *dst, const __u8 *address)
     dst[37] = '\0';
 }
 
+static int warder_cgroup_allowed(__u64 cgroup_id)
+{
+    __u32 key = 0;
+    __u64 *target = bpf_map_lookup_elem(&CGROUP_FILTER, &key);
+
+    if (!target || *target == 0) {
+        return 1;
+    }
+    return *target == cgroup_id;
+}
+
+static void warder_write_u64_hex(char *dst, __u64 value)
+{
+#pragma unroll
+    for (int pos = 0; pos < 16; pos++) {
+        int shift = 60 - (pos * 4);
+        dst[pos] = warder_hex_nibble((__u8)(value >> shift));
+    }
+    dst[16] = '\0';
+}
+
+static int warder_emit_socket_fd_record(void *ctx, long fd)
+{
+    struct warder_network_egress_record record = {};
+    __u64 cgroup_id = bpf_get_current_cgroup_id();
+
+    if (!warder_cgroup_allowed(cgroup_id)) {
+        return 0;
+    }
+
+    record.pid = (__u32)(bpf_get_current_pid_tgid() >> 32);
+    record.protocol = WARDER_NETWORK_PROTOCOL_SOCKET_FD;
+    record.denied = 0;
+    record.timestamp_nanos = bpf_ktime_get_ns();
+    record.cgroup_id = cgroup_id;
+    record.destination[0] = 'f';
+    record.destination[1] = 'd';
+    record.destination[2] = ':';
+    warder_write_u64_hex(&record.destination[3], (__u64)fd);
+
+    bpf_perf_event_output(ctx, &EVENTS, BPF_F_CURRENT_CPU, &record, sizeof(record));
+    return 0;
+}
+
 static int warder_emit_sockaddr_record(void *ctx, const void *uservaddr, __u8 protocol)
 {
     struct warder_network_egress_record record = {};
     __u16 family = 0;
+    __u64 cgroup_id = bpf_get_current_cgroup_id();
 
+    if (!warder_cgroup_allowed(cgroup_id)) {
+        return 0;
+    }
     if (!uservaddr) {
         return 0;
     }
@@ -197,6 +297,7 @@ static int warder_emit_sockaddr_record(void *ctx, const void *uservaddr, __u8 pr
     record.protocol = protocol;
     record.denied = 0;
     record.timestamp_nanos = bpf_ktime_get_ns();
+    record.cgroup_id = cgroup_id;
 
     if (family == WARDER_AF_INET) {
         struct warder_sockaddr_in addr = {};
@@ -232,6 +333,12 @@ int warder_network_sendto(struct sys_enter_sendto_ctx *ctx)
     return warder_emit_sockaddr_record(ctx, ctx->addr, WARDER_NETWORK_PROTOCOL_UDP);
 }
 
+SEC("tracepoint/syscalls/sys_enter_send")
+int warder_network_send(struct sys_enter_send_ctx *ctx)
+{
+    return warder_emit_socket_fd_record(ctx, ctx->fd);
+}
+
 SEC("tracepoint/syscalls/sys_enter_sendmsg")
 int warder_network_sendmsg(struct sys_enter_sendmsg_ctx *ctx)
 {
@@ -258,6 +365,18 @@ int warder_network_sendmmsg(struct sys_enter_sendmmsg_ctx *ctx)
         return 0;
     }
     return warder_emit_sockaddr_record(ctx, msg.msg_hdr.msg_name, WARDER_NETWORK_PROTOCOL_UDP);
+}
+
+SEC("tracepoint/syscalls/sys_enter_sendfile")
+int warder_network_sendfile(struct sys_enter_sendfile_ctx *ctx)
+{
+    return warder_emit_socket_fd_record(ctx, ctx->out_fd);
+}
+
+SEC("tracepoint/syscalls/sys_enter_splice")
+int warder_network_splice(struct sys_enter_splice_ctx *ctx)
+{
+    return warder_emit_socket_fd_record(ctx, ctx->fd_out);
 }
 
 char LICENSE[] SEC("license") = "Dual MIT/GPL";

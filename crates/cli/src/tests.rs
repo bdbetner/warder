@@ -3298,7 +3298,10 @@ fn render_session_receipt_summarizes_enforcement_state() {
     assert!(receipt.contains("receipt limitations:"));
     assert!(receipt.contains("commands run directly outside Warder are not contained"));
     assert!(receipt.contains("Protected-path reads are not blocked in this alpha"));
-    assert!(receipt.contains("File journals are best-effort visibility"));
+    assert!(
+        receipt.contains("limited to inotify protected-path changes plus live eBPF observations")
+    );
+    assert!(receipt.contains("fd writes"));
     assert!(receipt.contains("Network policy is visibility-only in this alpha"));
     assert!(receipt.contains("not tamper-proof forensics"));
 }
@@ -3549,10 +3552,7 @@ fn render_session_receipt_json_is_structured() {
         .as_array()
         .unwrap()
         .iter()
-        .any(|limitation| limitation
-            .as_str()
-            .unwrap()
-            .contains("File journals are best-effort visibility")));
+        .any(|limitation| limitation.as_str().unwrap().contains("fd writes")));
     assert_eq!(parsed["enforcement"]["cgroup"]["status"], "tagged");
     assert_eq!(parsed["enforcement"]["landlock"]["status"], "degraded");
     assert_eq!(parsed["enforcement"]["snapshot"]["status"], "not_requested");
@@ -4633,9 +4633,8 @@ fn render_session_receipt_from_db_includes_network_activity_rollup() {
     assert!(receipt.contains(
         "Inspect network activity rollups and raw network journal events for unexpected egress."
     ));
-    assert!(receipt.contains(
-        "Network journal visibility is limited to observed TCP connect(2) and UDP sendto(2)/sendmsg(2)/sendmmsg(2) attempts"
-    ));
+    assert!(receipt.contains("Network journal visibility is limited to observed TCP connect(2)"));
+    assert!(receipt.contains("socket send(2)"));
     assert!(receipt.contains("not complete socket forensics or enforcement"));
     assert!(receipt.contains(&format!(
             "Run `warder journal --db {} --session session-1 --network` to inspect recorded network egress activity.",
@@ -6219,6 +6218,7 @@ fn persist_ebpf_file_journal_events_stores_collector_events() {
         FakeEbpfReader {
             events: vec![warder_journal::EbpfFileAccessEvent {
                 process_id: Some(4242),
+                cgroup_id: None,
                 path: PathBuf::from("/tmp/notes/todo.md"),
                 operation: warder_journal::FileOperation::Write,
                 denied: true,
@@ -6255,6 +6255,7 @@ fn wait_for_child_polls_ebpf_file_journal_collector() {
         FakeEbpfReader {
             events: vec![warder_journal::EbpfFileAccessEvent {
                 process_id: Some(4242),
+                cgroup_id: None,
                 path: PathBuf::from("/tmp/notes/live.md"),
                 operation: warder_journal::FileOperation::Read,
                 denied: false,

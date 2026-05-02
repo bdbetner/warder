@@ -104,6 +104,7 @@ fn ebpf_network_egress_event_maps_to_network_journal_event() {
         "session-1",
         EbpfNetworkEgressEvent {
             process_id: Some(4242),
+            cgroup_id: None,
             destination: "203.0.113.10".to_string(),
             destination_port: Some(443),
             protocol: NetworkProtocol::Tcp,
@@ -130,6 +131,7 @@ fn render_network_journal_summary_is_scan_friendly() {
         "session-1",
         EbpfNetworkEgressEvent {
             process_id: Some(4242),
+            cgroup_id: None,
             destination: "203.0.113.10".to_string(),
             destination_port: Some(443),
             protocol: NetworkProtocol::Tcp,
@@ -141,6 +143,7 @@ fn render_network_journal_summary_is_scan_friendly() {
         "session-1",
         EbpfNetworkEgressEvent {
             process_id: None,
+            cgroup_id: None,
             destination: "example.test".to_string(),
             destination_port: Some(53),
             protocol: NetworkProtocol::Udp,
@@ -156,8 +159,8 @@ fn render_network_journal_summary_is_scan_friendly() {
     assert!(summary.contains("protocols: tcp=1, udp=1"));
     assert!(summary.contains("sources: eBPF=2"));
     assert!(summary.contains("attribution: direct-process=1, session-window=1"));
-    assert!(summary
-        .contains("visibility: limited to observed TCP connect(2) and UDP sendto(2)/sendmsg(2)/sendmmsg(2) attempts"));
+    assert!(summary.contains("visibility: limited to observed TCP connect(2)"));
+    assert!(summary.contains("socket send(2)"));
     assert!(summary.contains("tcp observed via eBPF"));
     assert!(summary.contains("udp denied via eBPF"));
 }
@@ -168,10 +171,24 @@ fn network_visibility_contract_does_not_claim_complete_forensics() {
 
     assert!(contract.contains("TCP connect(2)"));
     assert!(contract.contains("UDP sendto(2)"));
+    assert!(contract.contains("socket send(2)"));
+    assert!(contract.contains("sendfile(2)"));
+    assert!(contract.contains("splice(2)"));
     assert!(contract.contains("sendmsg(2)"));
     assert!(contract.contains("sendmmsg(2)"));
     assert!(contract.contains("connected socket snapshots from procfs"));
     assert!(contract.contains("not complete socket forensics or enforcement"));
+}
+
+#[test]
+fn file_visibility_contract_lists_fd_and_mmap_limits_plainly() {
+    let contract = file_visibility_contract();
+
+    assert!(contract.contains("common path syscalls"));
+    assert!(contract.contains("fd writes"));
+    assert!(contract.contains("ftruncate(2)"));
+    assert!(contract.contains("writable mmap(2)/mprotect(2)"));
+    assert!(contract.contains("not enforcement"));
 }
 
 #[test]
@@ -523,6 +540,7 @@ fn decodes_raw_ebpf_network_egress_record() {
     let event = decode_ebpf_network_egress_record(&raw).unwrap();
 
     assert_eq!(event.process_id, Some(4242));
+    assert_eq!(event.cgroup_id, Some(99));
     assert_eq!(event.destination, "203.0.113.10");
     assert_eq!(event.destination_port, Some(443));
     assert_eq!(event.protocol, NetworkProtocol::Tcp);
@@ -629,6 +647,7 @@ fn ebpf_network_collector_maps_reader_events_into_network_journal_events() {
     let mut collector = EbpfNetworkJournalCollector::new(FakeEbpfNetworkReader {
         events: vec![EbpfNetworkEgressEvent {
             process_id: Some(4242),
+            cgroup_id: None,
             destination: "203.0.113.10".to_string(),
             destination_port: Some(443),
             protocol: NetworkProtocol::Tcp,
@@ -722,6 +741,7 @@ fn ebpf_file_access_event_maps_denied_write_to_observed_denial() {
         "session-1",
         EbpfFileAccessEvent {
             process_id: Some(4242),
+            cgroup_id: None,
             path: PathBuf::from("/home/user/notes/todo.md"),
             operation: FileOperation::Write,
             denied: true,
@@ -748,6 +768,7 @@ fn ebpf_collector_maps_reader_events_into_file_journal_events() {
             events: vec![
                 EbpfFileAccessEvent {
                     process_id: Some(4242),
+                    cgroup_id: None,
                     path: PathBuf::from("/home/user/notes/todo.md"),
                     operation: FileOperation::Read,
                     denied: false,
@@ -755,6 +776,7 @@ fn ebpf_collector_maps_reader_events_into_file_journal_events() {
                 },
                 EbpfFileAccessEvent {
                     process_id: Some(4242),
+                    cgroup_id: None,
                     path: PathBuf::from("/usr/lib/libc.so.6"),
                     operation: FileOperation::Read,
                     denied: false,
@@ -783,6 +805,7 @@ fn ebpf_collector_keeps_unmatched_denials() {
         FakeEbpfReader {
             events: vec![EbpfFileAccessEvent {
                 process_id: Some(4242),
+                cgroup_id: None,
                 path: PathBuf::from("/etc/shadow"),
                 operation: FileOperation::Read,
                 denied: true,
@@ -824,12 +847,14 @@ fn decodes_raw_ebpf_ring_buffer_file_access_record() {
     raw[4] = EBPF_FILE_OPERATION_WRITE;
     raw[5] = 1;
     raw[6..14].copy_from_slice(&50_u64.to_ne_bytes());
+    raw[14..22].copy_from_slice(&99_u64.to_ne_bytes());
     let path = b"/home/user/notes\0";
-    raw[14..14 + path.len()].copy_from_slice(path);
+    raw[22..22 + path.len()].copy_from_slice(path);
 
     let event = decode_ebpf_file_access_record(&raw).unwrap();
 
     assert_eq!(event.process_id, Some(4242));
+    assert_eq!(event.cgroup_id, Some(99));
     assert_eq!(event.operation, FileOperation::Write);
     assert!(event.denied);
     assert_eq!(event.timestamp, UNIX_EPOCH + Duration::from_nanos(50));
@@ -919,7 +944,7 @@ fn rejects_malformed_ebpf_file_access_records_plainly() {
 
     let mut unknown_operation = vec![0_u8; EBPF_FILE_ACCESS_RECORD_SIZE];
     unknown_operation[4] = 99;
-    unknown_operation[14] = b'/';
+    unknown_operation[22] = b'/';
     let unknown = decode_ebpf_file_access_record(&unknown_operation).unwrap_err();
     assert!(unknown.message.contains("unknown eBPF file operation"));
 
@@ -1117,6 +1142,22 @@ fn default_ebpf_file_tracepoints_cover_more_than_openat() {
     assert!(tracepoints.contains(&("warder_file_renameat2", "sys_enter_renameat2")));
     assert!(tracepoints.contains(&("warder_file_unlinkat", "sys_enter_unlinkat")));
     assert!(tracepoints.contains(&("warder_file_truncate", "sys_enter_truncate")));
+    assert!(tracepoints.contains(&("warder_file_write", "sys_enter_write")));
+    assert!(tracepoints.contains(&("warder_file_pwritev2", "sys_enter_pwritev2")));
+    assert!(tracepoints.contains(&("warder_file_mmap", "sys_enter_mmap")));
+    assert!(tracepoints.contains(&("warder_file_mprotect", "sys_enter_mprotect")));
+    assert!(tracepoints.contains(&("warder_file_copy_file_range", "sys_enter_copy_file_range")));
+}
+
+#[test]
+fn default_ebpf_network_tracepoints_cover_socket_write_surfaces() {
+    let tracepoints = default_ebpf_network_tracepoints();
+
+    assert!(tracepoints.contains(&("warder_network_egress", "sys_enter_connect")));
+    assert!(tracepoints.contains(&("warder_network_sendto", "sys_enter_sendto")));
+    assert!(tracepoints.contains(&("warder_network_send", "sys_enter_send")));
+    assert!(tracepoints.contains(&("warder_network_sendfile", "sys_enter_sendfile")));
+    assert!(tracepoints.contains(&("warder_network_splice", "sys_enter_splice")));
 }
 
 #[test]
@@ -1235,9 +1276,10 @@ fn raw_ebpf_record(pid: u32, operation: u8, denied: bool, path: &str) -> Vec<u8>
     raw[4] = operation;
     raw[5] = u8::from(denied);
     raw[6..14].copy_from_slice(&50_u64.to_ne_bytes());
+    raw[14..22].copy_from_slice(&99_u64.to_ne_bytes());
     let path = path.as_bytes();
-    raw[14..14 + path.len()].copy_from_slice(path);
-    raw[14 + path.len()] = 0;
+    raw[22..22 + path.len()].copy_from_slice(path);
+    raw[22 + path.len()] = 0;
     raw
 }
 
@@ -1254,9 +1296,10 @@ fn raw_ebpf_network_record(
     raw[5] = u8::from(denied);
     raw[6..8].copy_from_slice(&destination_port.unwrap_or(0).to_ne_bytes());
     raw[8..16].copy_from_slice(&60_u64.to_ne_bytes());
+    raw[16..24].copy_from_slice(&99_u64.to_ne_bytes());
     let destination = destination.as_bytes();
-    raw[16..16 + destination.len()].copy_from_slice(destination);
-    raw[16 + destination.len()] = 0;
+    raw[24..24 + destination.len()].copy_from_slice(destination);
+    raw[24 + destination.len()] = 0;
     raw
 }
 
