@@ -21,11 +21,12 @@ const APP_STATE_KEY = "warder.desktop.state.v1";
 const DEFAULT_RECEIPT_KEY_PATH = "/run/warder-key";
 
 function toSelection(item: RecommendedProtection): ProtectedPathSelection {
+  const selected = item.exists && item.enabled_by_default;
   return {
     ...item,
-    selected: item.enabled_by_default,
-    readProtected: item.access === "read-write" && item.enabled_by_default,
-    writeProtected: item.enabled_by_default,
+    selected,
+    readProtected: item.access === "read-write" && selected,
+    writeProtected: selected,
     snapshotProtected: false,
   };
 }
