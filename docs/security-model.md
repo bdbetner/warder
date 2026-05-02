@@ -44,7 +44,7 @@ Snapshot ids are validated before restore path construction. Restore planning mu
 
 inotify watches protected paths for changes. eBPF file journaling can record live file access on privileged hosts and reports degraded coverage when BPF privileges or host support are unavailable.
 
-Network egress journaling has typed storage/readback, optional live eBPF observation for TCP `connect(2)` and UDP `sendto(2)`/`sendmsg(2)`/`sendmmsg(2)` attempts, and procfs connected-socket snapshots for the supervised process tree during supervised runs when the host exposes process fd and network tables.
+Network egress journaling has typed storage/readback, optional live eBPF observation for TCP `connect(2)`, UDP `sendto(2)`/`sendmsg(2)`/`sendmmsg(2)`, selected socket-fd send surfaces, and procfs connected-socket snapshots for the supervised process tree during supervised runs when the host exposes process fd and network tables.
 
 These journals improve accountability. They are not the primary write-denial boundary and must not be described as complete socket forensics or network enforcement.
 

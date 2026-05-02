@@ -2643,7 +2643,7 @@ fn render_pre_launch_readiness_for_run_reports_launch_decision() {
     assert!(readiness.contains("--cgroup-root"));
     assert!(readiness.contains("eBPF file journaling unavailable"));
     assert!(readiness.contains("launch visibility limits:"));
-    assert!(readiness.contains("already-open file descriptor writes"));
+    assert!(readiness.contains("fd-write and mmap eBPF observations"));
     assert!(readiness.contains("connected-socket writes"));
     assert!(readiness.contains("launch decision: refused unless --accept-degraded"));
 

@@ -52,7 +52,7 @@ Dry-run and explain output can show policy intent, host capability checks, plann
 
 ### Network Egress
 
-Unexpected egress can leak data. Warder can store and read network-egress events, and optional eBPF collection can observe selected TCP and UDP attempts where host support allows it. That is visibility, not network enforcement, and it is not complete socket forensics.
+Unexpected egress can leak data. Warder can store and read network-egress events, and optional eBPF collection can observe selected TCP, UDP, and socket-fd syscall surfaces where host support allows it. That is visibility, not network enforcement, and it is not complete socket forensics.
 
 ### Containerized Execution
 

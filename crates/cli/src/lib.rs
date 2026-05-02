@@ -3662,7 +3662,7 @@ fn planned_launch_visibility_limits(config: &WarderConfig) -> Vec<String> {
     let mut limits = Vec::new();
     if !config.zones.is_empty() {
         limits.push(
-            "file journals are best-effort visibility; inotify/eBPF can miss already-open file descriptor writes, writable memory maps, bind mounts, namespace changes, and activity outside Warder attribution"
+            "file journals are best-effort visibility; fd-write and mmap eBPF observations may not resolve back to protected paths, and bind mounts, namespace changes, unsupported syscalls, or activity outside Warder attribution can still hide file activity"
                 .to_string(),
         );
     }

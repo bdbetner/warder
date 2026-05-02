@@ -28,7 +28,7 @@ Warder filters observed live eBPF file events before persistence: protected-zone
 
 ## Current Coverage Limits
 
-The current eBPF file journal is an observation aid, not an enforcement boundary. The bundled object traces common path-based file syscalls by default, including `open`, `openat`, `openat2`, `creat`, `truncate`, `rename*`, `link*`, `symlink*`, `unlink*`, `mkdir*`, and `mknod*`. It can still miss file activity through writes on already-open file descriptors, writable memory maps, bind mounts, namespace changes, unsupported syscall families, or any activity that happens before Warder can attribute the process tree.
+The current eBPF file journal is an observation aid, not an enforcement boundary. The bundled object traces common path-based file syscalls by default, including `open`, `openat`, `openat2`, `creat`, `truncate`, `rename*`, `link*`, `symlink*`, `unlink*`, `mkdir*`, and `mknod*`. It also observes fd-write, `ftruncate(2)`, writable `mmap(2)`/`mprotect(2)`, `sendfile(2)`, `splice(2)`, and `copy_file_range(2)` surfaces. Those fd and mmap events may only produce synthetic `fd:<hex>` or `va:<hex>` labels, so they can still fail to prove which protected path was affected. Bind mounts, namespace changes, unsupported syscall families, or any activity that happens before Warder can attribute the process tree can also hide file activity.
 
 Because of those limits, receipts must treat live eBPF as degraded or incomplete visibility unless a privileged validation host has explicitly tested the required hooks for that release. Landlock write denial remains the v1 write-blocking path; eBPF journals should not be described as write enforcement, read blocking, or complete file forensics.
 
