@@ -28,6 +28,10 @@ The product-completion pass is now in alpha review. The next security pass shoul
 - eBPF and inotify coverage have known syscall/event blind spots that should be visible in receipts.
 - Default secret-path templates need broader, user-extensible coverage.
 - Release workflows should pin actions and verify release tags against passing CI.
+- The desktop CSP must not be null, and Tauri capability tests should keep plugin permissions narrow.
+- Desktop launches should default toward strict write-blocking, with best-effort degraded launches remaining an explicit user choice.
+- Receipt text and JSON should always state the limits around outside-Warder commands, read protection, network enforcement, and local receipt tamper resistance.
+- CI should include `cargo audit` so known RustSec vulnerabilities are visible before release.
 
 ## Reframed Findings
 
@@ -35,18 +39,21 @@ The product-completion pass is now in alpha review. The next security pass shoul
 - `token_hash` is vestigial state. It should either be removed or backed by real runtime authentication, but current configs do not promise authenticated agent identity.
 - The cgroup race does not mean Landlock is installed after the child starts; Landlock setup is in the child setup path. The unresolved risk is process attribution and journal coverage before cgroup tagging.
 - eBPF is intentionally observation-only today. The bug is any UI, config, or receipt wording that implies observation equals blocking.
+- Expanding eBPF to broad syscall, LSM, or cgroup-map coverage is not a small bug fix. Treat it as a privileged-host observability project with its own design and validation matrix.
+- Local HMAC receipt signing should remain optional in alpha. Requiring a key for every receipt would make basic receipt review fragile; the correct current behavior is to fail closed only when signing or verification is explicitly requested.
+- `cargo audit --deny warnings` is not yet a practical CI gate because Tauri's Linux desktop stack currently pulls transitive RustSec warnings for unmaintained GTK3/WebKit-adjacent crates. Keep the vulnerability scan, document the warning debt, and reassess when the upstream stack has a migration path.
 - Capability dropping, seccomp, stronger public-key receipt signing, reproducible builds, and GPG signatures are worthwhile future work after the narrower correctness fixes.
 
 ## Deferred Or Strategic
 
 - Full network enforcement.
 - Expanded Landlock read/execute policy.
+- Pre-spawn cgroup placement or a minimal launcher/helper that eliminates the current attribution race.
 - Seccomp and capability-bounded execution.
 - Independent/public-key receipt verification beyond the current local HMAC workflow.
 - Daemon IPC and active session coordination.
 - Additional snapshot backends.
-- eBPF migration or broader syscall coverage.
-- Desktop IPC and Tauri capability audit.
+- eBPF migration or broader syscall/LSM/cgroup-map coverage.
 
 ## Documentation Rule
 

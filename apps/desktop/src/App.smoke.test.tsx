@@ -105,6 +105,10 @@ function installInvokeMock() {
             exit_code: 0,
             command: ["true"],
             protected_zones: ["protected"],
+            limitations: [
+              "Protected-path reads are not blocked in this alpha.",
+              "Receipts are accountability records, not tamper-proof forensics.",
+            ],
             enforcement: {
               cgroup: { status: "degraded", message: null, path: null, backend: null, snapshot_id: null },
               landlock: { status: "degraded", message: null, path: null, backend: null, snapshot_id: null },

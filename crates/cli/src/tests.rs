@@ -3172,6 +3172,11 @@ fn render_session_receipt_summarizes_enforcement_state() {
     assert!(receipt.contains("degraded reasons:"));
     assert!(receipt.contains("Landlock unavailable"));
     assert!(receipt.contains("cgroup tagging is applied after process spawn"));
+    assert!(receipt.contains("receipt limitations:"));
+    assert!(receipt.contains("commands run directly outside Warder are not contained"));
+    assert!(receipt.contains("Protected-path reads are not blocked in this alpha"));
+    assert!(receipt.contains("Network policy is visibility-only in this alpha"));
+    assert!(receipt.contains("not tamper-proof forensics"));
 }
 
 #[test]
@@ -3400,6 +3405,22 @@ fn render_session_receipt_json_is_structured() {
     assert_eq!(parsed["status"], "completed");
     assert_eq!(parsed["exit_code"], 0);
     assert_eq!(parsed["command"][0], "sh");
+    assert!(parsed["limitations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|limitation| limitation
+            .as_str()
+            .unwrap()
+            .contains("commands run directly outside Warder")));
+    assert!(parsed["limitations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|limitation| limitation
+            .as_str()
+            .unwrap()
+            .contains("Protected-path reads are not blocked")));
     assert_eq!(parsed["enforcement"]["cgroup"]["status"], "tagged");
     assert_eq!(parsed["enforcement"]["landlock"]["status"], "degraded");
     assert_eq!(parsed["enforcement"]["snapshot"]["status"], "not_requested");

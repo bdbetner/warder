@@ -130,6 +130,26 @@ fn desktop_capability_file_keeps_plugin_permissions_narrow() {
 }
 
 #[test]
+fn desktop_tauri_config_sets_restrictive_csp() {
+    let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
+    let config = std::fs::read_to_string(config_path).expect("tauri config");
+    let csp_line = config
+        .lines()
+        .find(|line| line.contains("\"csp\""))
+        .expect("csp line");
+
+    assert!(csp_line.contains("\"csp\": \"default-src 'self'"));
+    assert!(csp_line.contains("object-src 'none'"));
+    assert!(csp_line.contains("frame-ancestors 'none'"));
+    for forbidden in ["\"csp\": null", "'unsafe-eval'", "https:", "http://*"] {
+        assert!(
+            !csp_line.contains(forbidden),
+            "desktop CSP should not include {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn host_readiness_is_available_to_frontend() {
     let readiness = host_readiness().expect("host readiness");
 

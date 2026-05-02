@@ -130,6 +130,7 @@ export interface StructuredReceipt {
   exit_code: number | null;
   command: string[];
   protected_zones: string[];
+  limitations: string[];
   enforcement: {
     cgroup: ReceiptStatus;
     landlock: ReceiptStatus;

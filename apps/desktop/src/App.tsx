@@ -97,7 +97,7 @@ export default function App() {
   const [selectedProfileId, setSelectedProfileId] = useState(DEFAULT_PROFILE_ID);
   const [agentCommand, setAgentCommand] = useState("codex");
   const [networkJournal, setNetworkJournal] = useState(false);
-  const [requireEnforcement, setRequireEnforcement] = useState(false);
+  const [requireEnforcement, setRequireEnforcement] = useState(true);
   const [configPath, setConfigPath] = useState("");
   const [dbPath, setDbPath] = useState("");
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -149,7 +149,7 @@ export default function App() {
         setNetworkJournal(
           persisted?.networkJournal ?? defaultProfile.template.network_journal,
         );
-        setRequireEnforcement(persisted?.requireEnforcement ?? false);
+        setRequireEnforcement(persisted?.requireEnforcement ?? true);
         setPaths(
           mergePersistedPaths([...selections, ...additions], persisted?.protectedPaths),
         );

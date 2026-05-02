@@ -26,6 +26,12 @@ For busy hosts, the live reader defaults to larger per-CPU perf buffers. Overrid
 
 Warder filters observed live eBPF file events before persistence: protected-zone matches are kept, unmatched observed events are dropped to avoid system-wide `openat` noise, and denied events are kept even when unmatched.
 
+## Current Coverage Limits
+
+The current alpha eBPF file journal is an observation aid, not an enforcement boundary. The bundled object traces `syscalls:sys_enter_openat` by default. That means it can miss file activity through other syscall paths such as `openat2`, `creat`, `rename`, `link`, `symlink`, `truncate`, writes through already-open file descriptors, writable memory maps, bind mounts, namespace changes, or any activity that happens before Warder can attribute the process tree.
+
+Because of those limits, receipts must treat live eBPF as degraded or incomplete visibility unless a privileged validation host has explicitly tested the required hooks for that release. Landlock write denial remains the v1 write-blocking path; eBPF journals should not be described as write enforcement, read blocking, or complete file forensics.
+
 The bundled object provides:
 
 - a tracepoint program named `warder_file_access`, or `WARDER_EBPF_FILE_PROGRAM`;

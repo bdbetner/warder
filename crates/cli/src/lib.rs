@@ -981,6 +981,12 @@ fn render_session_receipt_with_activity(
     ));
     append_reason_list("blocked reasons", &readiness.blocked_reasons, &mut lines);
     append_reason_list("degraded reasons", &readiness.degraded_reasons, &mut lines);
+    lines.push("receipt limitations:".to_string());
+    lines.extend(
+        receipt_limitations()
+            .iter()
+            .map(|limitation| format!("- {limitation}")),
+    );
     let dependency_summary = dependency_change_summary(&session.command);
     lines.push(format!(
         "dependency changes: {} ({})",
@@ -1119,6 +1125,7 @@ struct StructuredSessionReceipt {
     exit_code: Option<i32>,
     command: Vec<String>,
     protected_zones: Vec<String>,
+    limitations: Vec<&'static str>,
     root_pid: Option<u32>,
     enforcement: StructuredReceiptEnforcement,
     dependency_changes: DependencyChangeSummary,
@@ -1256,6 +1263,7 @@ impl From<&SessionRecord> for StructuredSessionReceipt {
             exit_code: session.exit_code,
             command: session.command.clone(),
             protected_zones: session.protected_zone_ids.clone(),
+            limitations: receipt_limitations(),
             root_pid: session.root_pid,
             enforcement: StructuredReceiptEnforcement {
                 cgroup: structured_cgroup_status(
@@ -4827,6 +4835,15 @@ fn network_destination_label(event: &NetworkJournalEvent) -> String {
         Some(port) => format!("{}:{port}", event.destination),
         None => event.destination.clone(),
     }
+}
+
+fn receipt_limitations() -> Vec<&'static str> {
+    vec![
+        "Warder only supervises commands launched through warder run or the Warder desktop launcher; commands run directly outside Warder are not contained.",
+        "Protected-path reads are not blocked in this alpha; do not treat a receipt as evidence that readable secrets were protected from exfiltration.",
+        "Network policy is visibility-only in this alpha; allowed destinations are not enforced and quiet network journals are not proof of no egress.",
+        "Receipts and the local SQLite journal are accountability records, not tamper-proof forensics or append-only evidence.",
+    ]
 }
 
 fn receipt_review_guidance(

@@ -4,6 +4,8 @@ The desktop app is a local control surface for the CLI-first Warder flow. It sho
 
 ## IPC Boundary
 
+The Tauri config must keep a non-null content security policy. The current policy allows local app resources, inline styles required by the bundled frontend, Tauri IPC, and the local Vite dev server during development. It denies object embedding, external frames, remote HTTPS content, and unsafe script evaluation.
+
 The Tauri capability file is intentionally narrow:
 
 - one local window: `main`

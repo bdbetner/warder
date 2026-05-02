@@ -318,6 +318,11 @@ function ReceiptTabPanel({
           title="Readiness degradation"
           empty="No readiness degradation."
         />
+        <TextList
+          items={receipt.limitations}
+          title="Receipt limitations"
+          empty="No receipt limitations reported."
+        />
       </div>
     );
   }

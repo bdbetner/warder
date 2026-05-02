@@ -8,6 +8,8 @@ Package-manager signatures are not included in current alpha releases.
 
 Treat every release as an alpha review build until the installed-artifact demo in [Release Readiness](release-readiness.md) passes on a clean Linux machine.
 
+CI runs `cargo audit` to fail on known RustSec vulnerabilities. Current Tauri/Linux desktop dependencies also produce RustSec warnings for unmaintained transitive GTK3/WebKit-adjacent crates. Those warnings are tracked as release risk, but they are not treated as a vulnerability failure until the upstream desktop stack offers a practical replacement path for Warder's Linux Tauri build.
+
 ## What To Verify
 
 Before installing a release asset:
