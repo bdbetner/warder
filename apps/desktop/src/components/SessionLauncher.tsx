@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { formatShellCommand, splitCommand } from "../command";
 import type { LaunchRequest, LaunchSessionResult } from "../types";
+import { ProtectionContract } from "./ProtectionContract";
 
 const COMMAND_STATE_KEY = "warder.desktop.launchCommand.v1";
 
@@ -31,6 +32,8 @@ interface SessionLauncherProps {
   dbPath: string;
   hasProtectedPaths: boolean;
   requireEnforcement: boolean;
+  networkJournal: boolean;
+  protectedPathCount: number;
   receiptKeyPath: string;
   showSupervisionScopeBanner: boolean;
   onReceiptKeyPathChange: (value: string) => void;
@@ -42,6 +45,8 @@ export function SessionLauncher({
   dbPath,
   hasProtectedPaths,
   requireEnforcement,
+  networkJournal,
+  protectedPathCount,
   receiptKeyPath,
   showSupervisionScopeBanner,
   onReceiptKeyPathChange,
@@ -178,6 +183,12 @@ export function SessionLauncher({
         Commands run through Warder using the saved setup policy. Review dry-run
         warnings before starting a protected session.
       </p>
+      <ProtectionContract
+        compact
+        protectedPathCount={protectedPathCount}
+        requireEnforcement={requireEnforcement}
+        networkJournal={networkJournal}
+      />
       {showSupervisionScopeBanner && (
         <p className="notice strong-notice">
           Warder only supervises processes launched via warder run or this

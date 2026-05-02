@@ -1,8 +1,10 @@
+import { groupProtectedPaths } from "../protectionGroups";
 import type { ProtectedPathSelection } from "../types";
 
 export function ProtectedZones({ paths }: { paths: ProtectedPathSelection[] }) {
   const selected = paths.filter((path) => path.selected);
   const available = paths.filter((path) => path.exists).length;
+  const grouped = groupProtectedPaths(selected);
 
   return (
     <section className="panel protected-zones-panel">
@@ -23,40 +25,48 @@ export function ProtectedZones({ paths }: { paths: ProtectedPathSelection[] }) {
           </p>
         </div>
       ) : (
-        <div className="path-list">
-          {selected.map((path) => (
-            <article className="path-row protected-card" key={path.id}>
-              <div className="path-card-top">
-                <div>
-                  <strong>{path.label}</strong>
-                  <small>{path.path}</small>
-                </div>
-                <span className={`zone-kind ${path.kind}`}>
-                  {path.kind === "vital-system" ? "System" : "User"}
+        <div className="zone-group-list">
+          {grouped.map(([group, groupPaths]) => (
+            <details className="zone-group" key={group} open={grouped.length <= 2}>
+              <summary>
+                <strong>{group}</strong>
+                <span>
+                  {groupPaths.length} folder{groupPaths.length === 1 ? "" : "s"}
                 </span>
+              </summary>
+              <div className="path-list">
+                {groupPaths.map((path) => (
+                  <article className="path-row protected-card" key={path.id}>
+                    <div className="path-card-top">
+                      <div>
+                        <strong>{path.label}</strong>
+                        <small>{path.path}</small>
+                      </div>
+                      <span className={`zone-kind ${path.kind}`}>
+                        {path.kind === "vital-system" ? "System safeguard" : "User folder"}
+                      </span>
+                    </div>
+                    <div className="protection-matrix">
+                      <span className={path.writeProtected ? "signal on" : "signal muted"}>
+                        Write-block
+                      </span>
+                      <span className={path.readProtected ? "signal on" : "signal muted"}>
+                        Read-block
+                      </span>
+                      <span
+                        className={path.snapshotProtected ? "signal on" : "signal muted"}
+                      >
+                        Snapshot
+                      </span>
+                    </div>
+                    <p>
+                      {path.reason} Warder applies this only to sessions launched
+                      through Warder.
+                    </p>
+                  </article>
+                ))}
               </div>
-              <div className="protection-matrix">
-                <span className={path.exists ? "signal on" : "signal off"}>
-                  {path.exists ? "Present" : "Missing"}
-                </span>
-                <span className={path.readProtected ? "signal on" : "signal muted"}>
-                  Read
-                </span>
-                <span className={path.writeProtected ? "signal on" : "signal muted"}>
-                  Write
-                </span>
-                <span
-                  className={path.snapshotProtected ? "signal on" : "signal muted"}
-                >
-                  Snapshot
-                </span>
-              </div>
-              <p>
-                {path.readProtected
-                  ? "Read request noted; write protection requested."
-                  : "Write protection requested."}
-              </p>
-            </article>
+            </details>
           ))}
         </div>
       )}

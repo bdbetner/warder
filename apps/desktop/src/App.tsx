@@ -384,6 +384,8 @@ export default function App() {
         <>
           <Dashboard
             paths={paths}
+            requireEnforcement={requireEnforcement}
+            networkJournal={networkJournal}
             onRunSetup={() => setSetupOpen(true)}
             onStartSession={focusLauncher}
           />
@@ -394,6 +396,8 @@ export default function App() {
               dbPath={dbPath}
               hasProtectedPaths={selectedCount > 0}
               requireEnforcement={requireEnforcement}
+              networkJournal={networkJournal}
+              protectedPathCount={selectedCount}
               receiptKeyPath={receiptKeyPath}
               showSupervisionScopeBanner={protectedLaunchCount < 3}
               onReceiptKeyPathChange={setReceiptKeyPath}

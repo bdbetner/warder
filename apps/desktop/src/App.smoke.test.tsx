@@ -46,6 +46,32 @@ const profileTemplates = [
       snapshot: "best-effort",
     },
   },
+  {
+    id: "claude-code",
+    declared_command: "claude",
+    summary: "known local CLI agent for Claude Code",
+    preflight: "confirm Claude workspace settings",
+    effect: "transparent preset only",
+    template: {
+      recommended_protected_paths: [],
+      writable_roots: ["/home/alex/project"],
+      network_journal: true,
+      snapshot: "best-effort",
+    },
+  },
+  {
+    id: "openclaw-agent",
+    declared_command: "openclaw agent",
+    summary: "OpenClaw agent run",
+    preflight: "confirm OpenClaw policy",
+    effect: "transparent preset only",
+    template: {
+      recommended_protected_paths: [],
+      writable_roots: ["/home/alex/project"],
+      network_journal: true,
+      snapshot: "best-effort",
+    },
+  },
 ];
 
 const recentSessions = [
@@ -150,13 +176,18 @@ describe("Warder desktop smoke flow", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Choose an agent profile" });
-    expect(screen.getByDisplayValue("/home/alex/.ssh")).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Set up your first protected agent" });
+    expect(screen.getByRole("button", { name: /Codex/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Claude/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /OpenClaw/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Save setup" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("SSH keys")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Save profile" }));
 
     await screen.findByRole("heading", {
-      name: "Protected sessions for local agent work",
+      name: "Run an agent without giving it the whole machine.",
     });
     const readinessPanel = screen
       .getByText("Host readiness")
@@ -168,9 +199,13 @@ describe("Warder desktop smoke flow", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      within(readinessPanel as HTMLElement).getByLabelText(
-        "Warder doctor summary",
-      ),
+      within(readinessPanel as HTMLElement).getByText("Snapshots"),
+    ).toBeInTheDocument();
+    await user.click(
+      within(readinessPanel as HTMLElement).getByText("Show raw doctor output"),
+    );
+    expect(
+      within(readinessPanel as HTMLElement).getByLabelText("Warder doctor summary"),
     ).toHaveTextContent("Btrfs snapshots unavailable");
     expect(
       screen.getByRole("button", { name: "Run protected session" }),
@@ -243,14 +278,14 @@ describe("Warder desktop smoke flow", () => {
     render(<App />);
 
     await screen.findByRole("heading", {
-      name: "Protected sessions for local agent work",
+      name: "Run an agent without giving it the whole machine.",
     });
     expect(
-      screen.queryByRole("heading", { name: "Choose an agent profile" }),
+      screen.queryByRole("heading", { name: "Set up your first protected agent" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/0 paths selected/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Start protected session" }),
+      screen.getByRole("button", { name: /Start protected session/ }),
     ).toBeDisabled();
     expect(screen.getByRole("button", { name: "Review readiness" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Dry run" })).toBeDisabled();
@@ -293,14 +328,17 @@ describe("Warder desktop smoke flow", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Choose an agent profile" });
-    const systemRow = screen.getByDisplayValue("/etc").closest("article");
-    const sshRow = screen.getByDisplayValue("/home/alex/.ssh").closest("article");
+    await screen.findByRole("heading", { name: "Set up your first protected agent" });
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const systemRow = screen.getByText("System config").closest("article");
+    const sshRow = screen.getByText("SSH keys").closest("article");
     expect(systemRow).not.toBeNull();
     expect(sshRow).not.toBeNull();
     await user.click(within(systemRow as HTMLElement).getAllByRole("checkbox")[0]);
     await user.click(within(sshRow as HTMLElement).getAllByRole("checkbox")[0]);
-    await user.click(screen.getByRole("button", { name: "Save setup" }));
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /Save profile/ }));
+    await user.click(screen.getByRole("button", { name: "Save profile" }));
 
     expect(
       await screen.findByText(/Select at least one protected path/),

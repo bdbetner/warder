@@ -136,7 +136,7 @@ export function SessionLogs({ dbPath }: { dbPath: string }) {
   }
 
   return (
-    <section className="panel">
+    <section className="panel" id="session-history">
       <p className="eyebrow">Receipts and logs</p>
       <h2>Session history</h2>
       <p className="muted">

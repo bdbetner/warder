@@ -65,6 +65,32 @@ const profileTemplates = [
     },
   },
   {
+    id: "claude-code",
+    declared_command: "claude",
+    summary: "known local CLI agent for Claude Code",
+    preflight: "confirm Claude workspace settings",
+    effect: "transparent preset only",
+    template: {
+      recommended_protected_paths: [],
+      writable_roots: ["/home/alex/project"],
+      network_journal: true,
+      snapshot: "best-effort",
+    },
+  },
+  {
+    id: "openclaw-agent",
+    declared_command: "openclaw agent",
+    summary: "OpenClaw agent run",
+    preflight: "confirm OpenClaw policy",
+    effect: "transparent preset only",
+    template: {
+      recommended_protected_paths: [],
+      writable_roots: ["/home/alex/project"],
+      network_journal: true,
+      snapshot: "best-effort",
+    },
+  },
+  {
     id: "generic-cli",
     declared_command: "<command>",
     summary: "generic local CLI command",
@@ -266,43 +292,67 @@ describe("Warder closed GUI button audit", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Choose an agent profile" });
-    const missingRow = screen
-      .getByDisplayValue("/home/alex/.config/missing-browser")
-      .closest("article");
+    await screen.findByRole("heading", { name: "Set up your first protected agent" });
+    expect(screen.getByRole("button", { name: /Codex/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Claude/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /OpenClaw/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Claude/ }));
+    expect(screen.getByLabelText("Agent command")).toHaveValue("claude");
+    await user.click(screen.getByRole("button", { name: /OpenClaw/ }));
+    expect(screen.getByLabelText("Agent command")).toHaveValue("openclaw agent");
+    await user.click(screen.getByRole("button", { name: /Codex/ }));
+    expect(screen.getByLabelText("Agent command")).toHaveValue("codex");
+
+    await user.click(screen.getByText("Advanced agent profiles"));
+    await user.selectOptions(screen.getByLabelText("Agent profile"), "generic-cli");
+    expect(screen.getByLabelText("Agent command")).toHaveValue("sh");
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const missingRow = screen.getByText("Missing browser profile").closest("article");
     expect(missingRow).not.toBeNull();
     expect(within(missingRow as HTMLElement).getAllByRole("checkbox")[0]).not.toBeChecked();
     expect(within(missingRow as HTMLElement).getAllByRole("checkbox")[0]).toBeDisabled();
 
-    await user.selectOptions(screen.getByLabelText("Agent profile"), "generic-cli");
-    expect(screen.getByLabelText("Agent command")).toHaveValue("sh");
-    expect(screen.getByDisplayValue("/home/alex/.netrc")).toBeInTheDocument();
-
-    await user.clear(screen.getByLabelText("Custom path"));
-    await user.type(screen.getByLabelText("Custom path"), "/tmp/warder gui/custom secrets");
+    expect(screen.getByText("Netrc credentials")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Save profile/ }));
+    expect(screen.getByRole("heading", { name: "Save your protected profile" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("heading", { name: "What should Warder protect?" })).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Add folder"));
+    await user.type(screen.getByLabelText("Add folder"), "/tmp/warder gui/custom secrets");
     await user.type(screen.getByLabelText("Label"), "Custom secrets");
-    await user.click(screen.getByRole("button", { name: "Add path" }));
-    const customRow = screen
+    await user.click(screen.getByRole("button", { name: "Add folder" }));
+    const customRow = screen.getByText("Custom secrets").closest("article");
+    expect(customRow).not.toBeNull();
+
+    await user.click(screen.getByText("Advanced protection options"));
+    const customAdvancedRow = screen
       .getByDisplayValue("/tmp/warder gui/custom secrets")
       .closest("article");
-    expect(customRow).not.toBeNull();
+    expect(customAdvancedRow).not.toBeNull();
     await user.click(
-      within(customRow as HTMLElement).getByRole("button", { name: "Snapshot" }),
+      within(customAdvancedRow as HTMLElement).getByRole("button", { name: "Snapshot" }),
     );
     await user.click(
-      within(customRow as HTMLElement).getByRole("button", { name: "Remove" }),
+      within(customAdvancedRow as HTMLElement).getByRole("button", { name: "Remove" }),
     );
     expect(
       screen.queryByDisplayValue("/tmp/warder gui/custom secrets"),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("checkbox", { name: "Network journal" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(
-      screen.getByRole("checkbox", { name: "Strict write-block launch" }),
+      screen.getByRole("checkbox", {
+        name: "Refuse launch if write blocking is unavailable",
+      }),
     );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Record network journal when supported" }),
+    );
+    await user.click(screen.getByText("Advanced storage paths"));
     await user.clear(screen.getByLabelText("Config path"));
     await user.type(screen.getByLabelText("Config path"), "/tmp/warder gui/config.toml");
-    await user.click(screen.getByRole("button", { name: "Save setup" }));
+    await user.click(screen.getByRole("button", { name: "Save profile" }));
 
     expect(invokeMock).toHaveBeenCalledWith("save_gui_config", {
       configPath: "/tmp/warder gui/config.toml",
@@ -319,7 +369,7 @@ describe("Warder closed GUI button audit", () => {
     });
     expect(
       await screen.findByRole("heading", {
-        name: "Protected sessions for local agent work",
+        name: "Run an agent without giving it the whole machine.",
       }),
     ).toBeInTheDocument();
   });
@@ -330,9 +380,9 @@ describe("Warder closed GUI button audit", () => {
     render(<App />);
 
     await screen.findByRole("heading", {
-      name: "Protected sessions for local agent work",
+      name: "Run an agent without giving it the whole machine.",
     });
-    await user.click(screen.getByRole("button", { name: "Start protected session" }));
+    await user.click(screen.getByRole("button", { name: /Start protected session/ }));
     expect(document.activeElement).toHaveAttribute("id", "session-launcher");
     expect(
       screen.getByRole("button", { name: "Run protected session" }),
@@ -368,6 +418,29 @@ describe("Warder closed GUI button audit", () => {
     });
   });
 
+  test("dashboard action buttons open launch, setup, and receipt-review surfaces", async () => {
+    persistCompletedSetup();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", {
+      name: "Run an agent without giving it the whole machine.",
+    });
+    await user.click(screen.getByRole("button", { name: /Edit protected folders/ }));
+    expect(
+      await screen.findByRole("heading", { name: "Set up your first protected agent" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Save profile/ }));
+    await user.click(screen.getByRole("button", { name: "Save profile" }));
+    await screen.findByRole("heading", {
+      name: "Run an agent without giving it the whole machine.",
+    });
+    const reviewLink = screen.getByRole("link", { name: /Review last run/ });
+    await user.click(reviewLink);
+    expect(window.location.hash).toBe("#session-history");
+  });
+
   test("doctor button retries after a closed-environment backend error", async () => {
     persistCompletedSetup();
     let doctorAttempts = 0;
@@ -389,7 +462,8 @@ describe("Warder closed GUI button audit", () => {
     render(<App />);
 
     expect(await screen.findByText(/closed doctor failure/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Run Warder Doctor" }));
+    await user.click(screen.getByRole("button", { name: "Run Warder doctor" }));
+    await user.click(await screen.findByText("Show raw doctor output"));
     expect(await screen.findByLabelText("Warder doctor summary")).toHaveTextContent(
       "host readiness: strong",
     );
