@@ -25,7 +25,7 @@ The easiest review path is a `.deb` on an Ubuntu/Debian-family desktop or an RPM
 | Landlock write blocking | Kernel with Landlock enabled, commonly Linux 5.13 or newer plus distro support | Warder reports degraded enforcement or refuses launch when strict mode requires enforcement. |
 | Experimental read blocking | Landlock host support plus explicit `read_deny = true` or `read_policy = "deny"` and disjoint `enforcement.readable_roots` | Disabled by default; unsupported or invalid read policy is reported during readiness checks. |
 | Session cgroup tagging | cgroup v2 and a writable delegated subtree | Warder reports degraded cgroup coverage unless the launch requires enforcement. |
-| Seccomp escape-syscall filter | Linux seccomp support | Warder reports setup failure or degraded readiness instead of silently claiming containment. |
+| Seccomp deny-list hardening | Linux seccomp support on x86_64 or aarch64 | Warder reports setup failure or degraded readiness instead of silently claiming containment. This blocks namespace/mount escapes and selected process/kernel observation syscalls; it is not a default-deny sandbox. |
 | File journal | inotify for protected-zone watches; optional eBPF for expanded observation | Receipts describe which journal sources were active and which events may be missing. |
 | Network journal | procfs and optional eBPF/BPF permissions | Network data is visibility-only in v1.0 beta and must not be treated as network enforcement. |
 | Btrfs snapshot and revert | Protected root on Btrfs plus configured snapshot root | Snapshot-required sessions fail closed; optional snapshots are reported as unavailable. |
@@ -58,7 +58,7 @@ warder dry-run --config warder.toml --agent <agent-id> -- <agent command>
 
 Use `--require-enforcement --receipt-key <path>` for strict sessions. Use `--accept-degraded` only when you have read the degraded reasons and are comfortable with the reduced coverage.
 
-Avoid running agents through `sudo`. If a privileged launcher is needed for host setup, `warder run --launch` requires `--allow-root` and a sudo environment with `SUDO_UID`/`SUDO_GID`; the child clears supplementary groups, drops its capability bounding set, and is dropped back to that non-root user before exec. Direct root launches are refused.
+Avoid running agents through `sudo`. If a privileged launcher is needed for host setup, `warder run --launch` requires `--allow-root` and a sudo environment with `SUDO_UID`/`SUDO_GID`; the child enables `no_new_privs`, disables dumpability, clears ambient capabilities and supplementary groups, drops its capability bounding set, and is dropped back to that non-root user before exec. Direct root launches are refused.
 
 ## Current Beta Limits
 

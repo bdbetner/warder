@@ -646,7 +646,30 @@ pub struct SeccompFilterError {
 }
 
 pub fn supervised_seccomp_denied_syscalls() -> &'static [&'static str] {
-    &["unshare", "mount", "umount2", "pivot_root", "setns"]
+    &[
+        "unshare",
+        "mount",
+        "umount2",
+        "pivot_root",
+        "setns",
+        "ptrace",
+        "process_vm_readv",
+        "process_vm_writev",
+        "perf_event_open",
+        "keyctl",
+        "fanotify_init",
+        "fanotify_mark",
+        "bpf",
+        "open_by_handle_at",
+        "userfaultfd",
+        "clone3",
+        "init_module",
+        "finit_module",
+        "delete_module",
+        "kexec_load",
+        "kexec_file_load",
+        "reboot",
+    ]
 }
 
 pub fn supervised_seccomp_architecture() -> &'static str {
@@ -656,12 +679,23 @@ pub fn supervised_seccomp_architecture() -> &'static str {
     }
     #[cfg(all(target_os = "linux", not(target_arch = "x86_64")))]
     {
-        "unsupported"
+        #[cfg(target_arch = "aarch64")]
+        {
+            "aarch64"
+        }
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            "unsupported"
+        }
     }
     #[cfg(not(target_os = "linux"))]
     {
         "non-linux"
     }
+}
+
+pub fn supervised_seccomp_policy_summary() -> &'static str {
+    "deny-list hardening for namespace, mount, process-inspection, kernel-observation, module-loading, and reboot syscalls; not a default-deny sandbox"
 }
 
 #[cfg(target_os = "linux")]
@@ -689,7 +723,7 @@ pub fn apply_supervised_seccomp_filter() -> Result<(), SeccompFilterError> {
     let denied = supervised_seccomp_denied_syscall_numbers();
     let mut filters = Vec::with_capacity(5 + denied.len() * 2);
     // Seccomp syscall numbers are architecture-specific. Check the audited
-    // architecture first so a process cannot run the x86_64 deny list under a
+    // architecture first so a process cannot run the deny list under a
     // different syscall ABI and accidentally allow the escape syscalls.
     filters.push(seccomp_stmt(
         (libc::BPF_LD | libc::BPF_W | libc::BPF_ABS) as u16,
@@ -760,13 +794,23 @@ const SECCOMP_DATA_NR_OFFSET: u32 = 0;
 const SECCOMP_DATA_ARCH_OFFSET: u32 = 4;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 const AUDIT_ARCH_X86_64: u32 = 0xC000_003E;
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const AUDIT_ARCH_AARCH64: u32 = 0xC000_00B7;
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn supervised_seccomp_expected_arch() -> Option<u32> {
     Some(AUDIT_ARCH_X86_64)
 }
 
-#[cfg(all(target_os = "linux", not(target_arch = "x86_64")))]
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+fn supervised_seccomp_expected_arch() -> Option<u32> {
+    Some(AUDIT_ARCH_AARCH64)
+}
+
+#[cfg(all(
+    target_os = "linux",
+    not(any(target_arch = "x86_64", target_arch = "aarch64"))
+))]
 fn supervised_seccomp_expected_arch() -> Option<u32> {
     None
 }
@@ -779,6 +823,23 @@ fn supervised_seccomp_denied_syscall_numbers() -> Vec<u32> {
         libc::SYS_umount2 as u32,
         libc::SYS_pivot_root as u32,
         libc::SYS_setns as u32,
+        libc::SYS_ptrace as u32,
+        libc::SYS_process_vm_readv as u32,
+        libc::SYS_process_vm_writev as u32,
+        libc::SYS_perf_event_open as u32,
+        libc::SYS_keyctl as u32,
+        libc::SYS_fanotify_init as u32,
+        libc::SYS_fanotify_mark as u32,
+        libc::SYS_bpf as u32,
+        libc::SYS_open_by_handle_at as u32,
+        libc::SYS_userfaultfd as u32,
+        libc::SYS_clone3 as u32,
+        libc::SYS_init_module as u32,
+        libc::SYS_finit_module as u32,
+        libc::SYS_delete_module as u32,
+        libc::SYS_kexec_load as u32,
+        libc::SYS_kexec_file_load as u32,
+        libc::SYS_reboot as u32,
     ]
 }
 
@@ -1207,17 +1268,49 @@ mod tests {
 
     #[test]
     fn supervised_seccomp_filter_denies_namespace_and_mount_syscalls() {
-        assert_eq!(
-            supervised_seccomp_denied_syscalls(),
-            ["unshare", "mount", "umount2", "pivot_root", "setns"]
-        );
+        let denied = supervised_seccomp_denied_syscalls();
+
+        for syscall in [
+            "unshare",
+            "mount",
+            "umount2",
+            "pivot_root",
+            "setns",
+            "ptrace",
+            "process_vm_readv",
+            "process_vm_writev",
+            "perf_event_open",
+            "keyctl",
+            "fanotify_init",
+            "fanotify_mark",
+            "bpf",
+            "open_by_handle_at",
+            "userfaultfd",
+            "clone3",
+            "init_module",
+            "finit_module",
+            "delete_module",
+            "kexec_load",
+            "kexec_file_load",
+            "reboot",
+        ] {
+            assert!(denied.contains(&syscall), "{syscall} should be denied");
+        }
+        assert!(supervised_seccomp_policy_summary().contains("not a default-deny sandbox"));
     }
 
     #[test]
     fn supervised_seccomp_filter_declares_architecture_scope() {
+        #[cfg(target_arch = "x86_64")]
         assert_eq!(supervised_seccomp_architecture(), "x86_64");
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(supervised_seccomp_architecture(), "aarch64");
         #[cfg(target_os = "linux")]
+        #[cfg(target_arch = "x86_64")]
         assert_eq!(supervised_seccomp_expected_arch(), Some(AUDIT_ARCH_X86_64));
+        #[cfg(target_os = "linux")]
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(supervised_seccomp_expected_arch(), Some(AUDIT_ARCH_AARCH64));
     }
 
     #[test]

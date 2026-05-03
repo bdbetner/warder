@@ -64,7 +64,7 @@ Common secret paths remain high risk: `.ssh/`, `.gnupg/`, `.aws/`, `.azure/`, `.
 
 ### Policy Misconfiguration
 
-Users can define zones that are too broad, too narrow, or contradictory. Config validation should warn about whole-home protection, missing snapshot backends, overlapping zones, and unsupported enforcement.
+Users can define zones that are too broad, too narrow, or contradictory. Config validation rejects filesystem-root and whole-home protected zones, warns on common secret paths where read blocking is not enabled, and reports missing snapshot backends, overlapping zones, and unsupported enforcement.
 
 ### Audit Tampering
 

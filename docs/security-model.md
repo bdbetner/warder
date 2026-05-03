@@ -43,7 +43,7 @@ Best-effort launches may continue with degraded protection only after the caller
 
 Warder refuses launches when the SQLite database path or strict-mode receipt key path is below a configured zone path or agent writable root. Agent writable roots are the paths Landlock allows the child to write, and zone paths are the session's sensitive policy surface, so placing Warder state there would let a successful supervised session tamper with or entangle its own local accountability records. This check is a placement guard, not tamper-proof forensics; unrelated same-user processes remain outside Warder's control.
 
-Warder also refuses to launch an agent as root unless `--allow-root` is passed. On sudo-based launches, `--allow-root` requires `SUDO_UID` and `SUDO_GID`; the child is moved into the prepared cgroup, clears supplementary groups, drops its capability bounding set, and then drops to that non-root user before seccomp and Landlock are applied. Direct root launches without a non-root drop target are refused.
+Warder also refuses to launch an agent as root unless `--allow-root` is passed. On sudo-based launches, `--allow-root` requires `SUDO_UID` and `SUDO_GID`; the child is moved into the prepared cgroup, enables `no_new_privs`, disables dumpability, clears ambient capabilities and supplementary groups, drops its capability bounding set, and then drops to that non-root user before seccomp and Landlock are applied. Direct root launches without a non-root drop target are refused.
 
 Snapshot ids are validated before restore path construction. Restore planning must continue to reject path separators, traversal, absolute paths, and empty ids before joining anything below a snapshot root.
 
@@ -57,7 +57,7 @@ These journals improve accountability. They are not the primary write-denial bou
 
 Cgroup tagging supports attribution for journals and receipts. Warder-launched sessions create the session cgroup before spawn and move the child into it from the child setup path before `exec`. If cgroup setup fails, the launch fails or degrades according to policy; processes launched directly outside Warder remain out of scope.
 
-The supervised setup path also installs a small Linux x86_64 seccomp filter that denies mount and namespace escape syscalls including `unshare`, `mount`, `umount2`, `pivot_root`, and `setns`. This is escape hardening, not a complete syscall sandbox. See [Seccomp Escape Filter](seccomp-filter.md).
+The supervised setup path also installs a Linux seccomp deny-list filter on supported architectures. It blocks namespace/mount escape syscalls plus process-inspection and kernel-observation surfaces such as `ptrace`, `process_vm_readv`, `process_vm_writev`, `perf_event_open`, `keyctl`, `fanotify_*`, and `bpf`. This is escape hardening, not a complete default-deny syscall sandbox. See [Seccomp Escape Filter](seccomp-filter.md).
 
 ## Snapshots
 

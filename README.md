@@ -32,7 +32,7 @@ Warder is a tool-agnostic supervision layer for explicit local agent sessions. I
 
 It gives you real host-side guardrails without forcing every workflow into a container, remote VM, or separate development account:
 
-- **Pre-exec supervised setup**: Warder-launched commands are assigned to a session cgroup, covered by a small seccomp escape-syscall filter, and locked down with Landlock before the target command is executed, where the host supports those features.
+- **Pre-exec supervised setup**: Warder-launched commands are assigned to a session cgroup, covered by seccomp deny-list hardening, and locked down with Landlock before the target command is executed, where the host supports those features.
 - **Protected zones and Btrfs snapshots**: Declare sensitive directories, block protected writes with Landlock where available, snapshot supported Btrfs roots before risky sessions, and revert from recorded snapshots when needed.
 - **Readable journals**: Warder records protected-zone file activity with inotify and can add optional eBPF/procfs network and file-observation data where built, permitted, and supported by the kernel.
 - **Tamper-evident receipts**: Session receipts record the command, policy, active protections, degraded protections, journal coverage, snapshot state, and local hash-chain integrity. Strict launches require an external receipt key and can be checked with `warder verify-receipts`.

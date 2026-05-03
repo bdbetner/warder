@@ -7223,6 +7223,7 @@ fn configure_supervised_child_setup(
 
 #[cfg(target_os = "linux")]
 fn drop_child_privileges(target: RootDropTarget) -> io::Result<()> {
+    harden_child_privilege_state_before_drop()?;
     clear_child_supplementary_groups()?;
     drop_child_capability_bounding_set()?;
     let gid_result = unsafe { libc::setgid(target.gid) };
@@ -7233,7 +7234,65 @@ fn drop_child_privileges(target: RootDropTarget) -> io::Result<()> {
     if uid_result != 0 {
         return Err(io::Error::last_os_error());
     }
+    harden_child_privilege_state_after_drop()?;
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn harden_child_privilege_state_before_drop() -> io::Result<()> {
+    set_child_no_new_privs()?;
+    set_child_non_dumpable()?;
+    clear_child_ambient_capabilities()?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn harden_child_privilege_state_after_drop() -> io::Result<()> {
+    // Linux may reset dumpability across setuid-style transitions. Reapply it
+    // after the UID/GID drop so same-user ptrace/core-dump inspection stays off.
+    set_child_non_dumpable()
+}
+
+#[cfg(target_os = "linux")]
+fn set_child_no_new_privs() -> io::Result<()> {
+    let result = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
+    if result != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn set_child_non_dumpable() -> io::Result<()> {
+    let result = unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) };
+    if result != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn clear_child_ambient_capabilities() -> io::Result<()> {
+    let result = unsafe {
+        libc::prctl(
+            libc::PR_CAP_AMBIENT,
+            libc::PR_CAP_AMBIENT_CLEAR_ALL,
+            0,
+            0,
+            0,
+        )
+    };
+    if result == 0 {
+        return Ok(());
+    }
+    let error = io::Error::last_os_error();
+    if matches!(
+        error.raw_os_error(),
+        Some(libc::EINVAL) | Some(libc::ENOSYS)
+    ) {
+        return Ok(());
+    }
+    Err(error)
 }
 
 #[cfg(target_os = "linux")]

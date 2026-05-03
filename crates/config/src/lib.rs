@@ -380,11 +380,13 @@ fn validate_zone_path(report: &mut ConfigValidationReport, zone_id: &str, path: 
     }
 
     if is_whole_home_path(path) {
-        report.warning(format!(
-            "protected zone '{}' uses whole-home protection; prefer explicit subpaths",
+        report.error(format!(
+            "protected zone '{}' uses whole-home protection; use explicit subpaths instead",
             zone_id
         ));
     }
+
+    warn_if_common_secret_path(report, zone_id, path);
 
     if path
         .components()
@@ -392,6 +394,33 @@ fn validate_zone_path(report: &mut ConfigValidationReport, zone_id: &str, path: 
     {
         report.error(format!(
             "protected zone '{}' path '{}' must not contain parent traversal",
+            zone_id,
+            path.display()
+        ));
+    }
+}
+
+fn warn_if_common_secret_path(report: &mut ConfigValidationReport, zone_id: &str, path: &Path) {
+    let path_text = path.to_string_lossy();
+    let secret_markers = [
+        "/.ssh",
+        "/.gnupg",
+        "/.aws",
+        "/.kube",
+        "/.docker",
+        "/.config/gh",
+        "/.env",
+        "/.npmrc",
+        "/.pypirc",
+        "/.netrc",
+    ];
+
+    if secret_markers
+        .iter()
+        .any(|marker| path_text.ends_with(marker) || path_text.contains(&format!("{marker}/")))
+    {
+        report.warning(format!(
+            "protected zone '{}' covers common secret path '{}'; write denial protects integrity, but reads are allowed unless experimental read denial is enabled",
             zone_id,
             path.display()
         ));
@@ -797,7 +826,7 @@ agents:
     }
 
     #[test]
-    fn warns_about_whole_home_protection() {
+    fn rejects_whole_home_protection() {
         let config = WarderConfig::from_toml(
             r#"
                 [[zones]]
@@ -817,12 +846,41 @@ agents:
 
         let report = config.validate(&supported_environment());
 
-        assert!(!report.has_errors());
+        assert!(report.has_errors());
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.severity == ConfigIssueSeverity::Error
+                && issue.message.contains("whole-home")));
+    }
+
+    #[test]
+    fn warns_when_protected_zone_covers_common_secret_path() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [[zones]]
+                id = "ssh"
+                name = "SSH"
+                paths = ["/home/user/.ssh"]
+                write_policy = "deny"
+                snapshot = "best-effort"
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
         assert!(report
             .issues
             .iter()
             .any(|issue| issue.severity == ConfigIssueSeverity::Warning
-                && issue.message.contains("whole-home")));
+                && issue.message.contains("common secret path")
+                && issue.message.contains("reads are allowed")));
     }
 
     #[test]
