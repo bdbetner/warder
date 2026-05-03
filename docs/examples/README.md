@@ -1,6 +1,6 @@
 # Examples
 
-These examples show common ways to think about Warder protected zones. Use `warder init` for new configs, then adapt the generated file to match your paths and policy.
+These examples show common ways to think about Warder protected zones. For Codex CLI, Claude Code, or OpenClaw, start with `warder setup <agent> --workspace . --protect-secrets`, then review the generated file. Use `warder init` for local scripts and custom commands.
 
 ## Scenarios
 

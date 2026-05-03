@@ -27,7 +27,8 @@ It is not a general endpoint security product, a cloud AI governance tool, a mod
    - Provide JSON output so the desktop app can reuse the same result.
 
 3. **First-class setup wrappers**
-   - Add profile-first setup for Codex CLI, Claude Code, and OpenClaw.
+   - `warder setup codex|claude|openclaw --workspace <path> --protect-secrets` now generates a first policy from the known agent preset.
+   - Next: add short launch aliases such as `warder codex` and `warder claude` once the setup command has settled.
    - Keep local scripts as the generic fallback.
    - Do not include Goose in the near-term setup surface until there is specific demand and a tested flow.
 

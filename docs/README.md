@@ -10,6 +10,7 @@ Warder wraps explicit local agent sessions with protected paths, receipts, and r
 - [Prototype Demo](prototype-demo.md): run the source-checkout demo flow.
 - [Product Proof Path](product-proof-path.md): next demo, host-probe, matrix, and setup-wrapper work.
 - Run `warder test-host` after install to prove which host controls work on the current machine.
+- Run `warder setup codex|claude|openclaw --workspace . --protect-secrets` to generate a first policy from an agent preset.
 - [Protection Matrix](protection-matrix.md): expected coverage on common Linux, container, and OpenClaw hosts.
 - [Protected Zones](protected-zones.md): choose what Warder should protect.
 - [OpenClaw Support](openclaw-support.md): recommended way to run OpenClaw through Warder.

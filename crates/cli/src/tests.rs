@@ -206,6 +206,32 @@ fn parses_test_host_command_with_json_format_and_alias() {
 }
 
 #[test]
+fn parses_setup_command_for_codex() {
+    assert_eq!(
+        parse_args([
+            "warder",
+            "setup",
+            "codex",
+            "--workspace",
+            ".",
+            "--protect-secrets",
+            "--output",
+            "warder.toml",
+            "--force"
+        ])
+        .unwrap(),
+        CliCommand::Setup {
+            agent: SetupAgent::Codex,
+            workspace: PathBuf::from("."),
+            output: PathBuf::from("warder.toml"),
+            protect_secrets: true,
+            force: true,
+            print: false,
+        }
+    );
+}
+
+#[test]
 fn parses_init_command_with_starter_config_options() {
     assert_eq!(
         parse_args([
@@ -469,6 +495,7 @@ fn usage_centers_no_daemon_run_workflow() {
     assert!(usage.contains("profiles: warder profiles [--format text|json]"));
     assert!(usage.contains("readiness: warder doctor"));
     assert!(usage.contains("prove host controls: warder test-host [--format text|json]"));
+    assert!(usage.contains("profile setup: warder setup codex|claude|openclaw"));
     assert!(usage.contains(
             "recovery: warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]"
         ));
@@ -696,6 +723,61 @@ fn render_host_verification_json_is_structured() {
         rendered.contains("\"status\": \"configured/planned\"")
             || rendered.contains("\"status\": \"degraded\"")
     );
+}
+
+#[test]
+fn render_profile_setup_config_generates_parseable_codex_policy() {
+    let config = render_profile_setup_config(&ProfileSetupRequest {
+        agent: SetupAgent::Codex,
+        workspace: PathBuf::from("/tmp/warder-workspace"),
+        protect_secrets: true,
+    })
+    .unwrap();
+    let parsed = warder_config::WarderConfig::from_toml(&config).unwrap();
+
+    assert!(config.contains("writable-roots = [\"/tmp/warder-workspace\"]"));
+    assert_eq!(parsed.agents[0].id, "codex-cli");
+    assert_eq!(parsed.agents[0].command, "codex");
+    assert_eq!(parsed.zones[0].id, "default-secrets");
+    assert!(!parsed.zones[0].paths.is_empty());
+}
+
+#[test]
+fn render_profile_setup_config_requires_protect_secrets() {
+    let error = render_profile_setup_config(&ProfileSetupRequest {
+        agent: SetupAgent::Claude,
+        workspace: PathBuf::from("/tmp/warder-workspace"),
+        protect_secrets: false,
+    })
+    .unwrap_err();
+
+    assert!(error.message.contains("--protect-secrets"));
+}
+
+#[test]
+fn write_profile_setup_config_refuses_overwrite_and_gives_next_steps() {
+    let output = temp_file("warder-cli-setup-config", "toml");
+    std::fs::write(&output, "existing").unwrap();
+    let request = ProfileSetupRequest {
+        agent: SetupAgent::OpenClaw,
+        workspace: PathBuf::from("/tmp/warder workspace"),
+        protect_secrets: true,
+    };
+
+    let error = write_profile_setup_config(&output, &request, false).unwrap_err();
+    assert!(error.message.contains("failed to create setup config"));
+    assert_eq!(std::fs::read_to_string(&output).unwrap(), "existing");
+
+    let status = write_profile_setup_config(&output, &request, true).unwrap();
+    let config = std::fs::read_to_string(&output).unwrap();
+
+    assert!(status.contains("wrote OpenClaw setup config"));
+    assert!(status.contains("warder explain --config"));
+    assert!(status.contains("warder dry-run --config"));
+    assert!(config.contains("profile = \"openclaw-agent\""));
+    assert!(config.contains("writable-roots = [\"/tmp/warder workspace\"]"));
+
+    let _ = std::fs::remove_file(output);
 }
 
 #[test]

@@ -57,6 +57,29 @@ fn main() {
                 Err(error) => exit_with_error(error),
             }
         }
+        Ok(warder_cli::CliCommand::Setup {
+            agent,
+            workspace,
+            output,
+            protect_secrets,
+            force,
+            print,
+        }) => {
+            let request = warder_cli::ProfileSetupRequest {
+                agent,
+                workspace,
+                protect_secrets,
+            };
+            let result = if print {
+                warder_cli::render_profile_setup_config(&request)
+            } else {
+                warder_cli::write_profile_setup_config(output, &request, force)
+            };
+            match result {
+                Ok(status) => println!("{status}"),
+                Err(error) => exit_with_error(error),
+            }
+        }
         Ok(warder_cli::CliCommand::Init {
             output,
             profile,

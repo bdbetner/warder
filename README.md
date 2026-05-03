@@ -100,7 +100,17 @@ warder test-host --format json
 
 `test-host` labels each control as `proven working`, `configured/planned`, `degraded`, or `unsupported`. Use it when you need evidence beyond a planning-only `doctor` report.
 
-Create your own starter config:
+Create your first agent profile from a safe preset:
+
+```bash
+warder setup codex --workspace . --protect-secrets --print
+warder setup claude --workspace . --protect-secrets
+warder setup openclaw --workspace . --protect-secrets
+```
+
+`warder setup` generates a reviewable policy for the selected agent, the current workspace, and common secret folders such as SSH, cloud, GitHub CLI, and Kubernetes credentials. Codex CLI, Claude Code, and OpenClaw are the first supported setup choices; use `warder init` for local scripts or custom commands.
+
+Create a lower-level starter config:
 
 ```bash
 warder init \

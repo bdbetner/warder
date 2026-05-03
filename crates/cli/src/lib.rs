@@ -39,10 +39,15 @@ use warder_snapshot::{
 };
 
 mod host_probe;
+mod setup;
 pub use host_probe::{
     is_internal_host_probe_command, render_host_verification_from_probe,
     render_host_verification_from_probe_with_runner, run_internal_host_probe_command,
     HostVerificationFormat, HostVerificationReport, InternalHostProbeKind, InternalHostProbeResult,
+};
+pub use setup::{
+    default_setup_output, render_profile_setup_config, setup_agent_from_str, setup_agent_label,
+    write_profile_setup_config, ProfileSetupRequest, SetupAgent,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,6 +64,14 @@ pub enum CliCommand {
     },
     TestHost {
         format: HostVerificationFormat,
+    },
+    Setup {
+        agent: SetupAgent,
+        workspace: PathBuf,
+        output: PathBuf,
+        protect_secrets: bool,
+        force: bool,
+        print: bool,
     },
     Init {
         output: PathBuf,
@@ -268,6 +281,7 @@ where
         "status" => Ok(CliCommand::Status),
         "doctor" => parse_doctor(args),
         "test-host" | "verify-host" => parse_test_host(args),
+        "setup" => parse_setup(args),
         "init" => parse_init(args),
         "profiles" => parse_profiles(args),
         "run" => parse_run(args),
@@ -359,6 +373,25 @@ pub fn command_summary(command: &CliCommand) -> String {
         CliCommand::TestHost { format } => format!(
             "host verification requested as {}",
             host_verification_format_label(*format)
+        ),
+        CliCommand::Setup {
+            agent,
+            workspace,
+            output,
+            protect_secrets,
+            print,
+            ..
+        } => format!(
+            "{} setup requested for workspace '{}' {} '{}'{}",
+            setup_agent_label(*agent),
+            workspace.display(),
+            if *print { "printed from" } else { "at" },
+            output.display(),
+            if *protect_secrets {
+                " with protected secret defaults"
+            } else {
+                ""
+            }
         ),
         CliCommand::Init {
             output,
@@ -2152,6 +2185,7 @@ record only: warder run --config <path> --agent <id> -- <agent command>\n\
 preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
 readiness: warder doctor [--config <path>]\n\
 prove host controls: warder test-host [--format text|json]\n\
+profile setup: warder setup codex|claude|openclaw --workspace <path> --protect-secrets [--output <path>] [--force] [--print]\n\
 init: warder init --protected-path <path> [--output <path>] [--profile <id>] [--agent-command <command>] [--force] [--print]\n\
 profiles: warder profiles [--format text|json]\n\
 snapshot: warder snapshot --config <path> --session <id> --snapshot-root <path>\n\
@@ -2930,6 +2964,56 @@ fn parse_test_host(args: Vec<String>) -> Result<CliCommand, CliError> {
         }
     }
     Ok(CliCommand::TestHost { format })
+}
+
+fn parse_setup(args: Vec<String>) -> Result<CliCommand, CliError> {
+    let Some(agent_name) = args.first() else {
+        return err("setup requires an agent: codex, claude, or openclaw");
+    };
+    let agent = setup_agent_from_str(agent_name).ok_or_else(|| CliError {
+        message: format!("unknown setup agent '{agent_name}'; expected codex, claude, or openclaw"),
+    })?;
+    let mut output = default_setup_output(agent);
+    let mut workspace = None;
+    let mut protect_secrets = false;
+    let mut force = false;
+    let mut print = false;
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--workspace" => {
+                workspace = Some(PathBuf::from(value_after(&args, index, "--workspace")?));
+                index += 2;
+            }
+            "--protect-secrets" => {
+                protect_secrets = true;
+                index += 1;
+            }
+            "--output" => {
+                output = PathBuf::from(value_after(&args, index, "--output")?);
+                index += 2;
+            }
+            "--force" => {
+                force = true;
+                index += 1;
+            }
+            "--print" => {
+                print = true;
+                index += 1;
+            }
+            unknown => return err(format!("unknown setup option '{unknown}'")),
+        }
+    }
+    Ok(CliCommand::Setup {
+        agent,
+        workspace: workspace.ok_or_else(|| CliError {
+            message: "setup requires --workspace <path>".to_string(),
+        })?,
+        output,
+        protect_secrets,
+        force,
+        print,
+    })
 }
 
 fn parse_init(args: Vec<String>) -> Result<CliCommand, CliError> {
