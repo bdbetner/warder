@@ -1,6 +1,6 @@
 # Warder Documentation
 
-Warder is a Linux supervised-session safety layer for local agent sessions. Start with the page that matches what you are trying to do.
+Warder wraps explicit local agent sessions with protected paths, receipts, and recovery where Linux supports it. Start with the page that matches what you are trying to do.
 
 ## Try Warder
 
@@ -8,6 +8,7 @@ Warder is a Linux supervised-session safety layer for local agent sessions. Star
 - [Linux Compatibility](linux-compatibility.md): supported release target, host requirements, and feature degradation.
 - [Reviewer Feedback Guide](reviewer-feedback.md): release-artifact demo path and feedback checklist.
 - [Prototype Demo](prototype-demo.md): run the source-checkout demo flow.
+- [Product Proof Path](product-proof-path.md): next demo, host-probe, matrix, and setup-wrapper work.
 - [Protected Zones](protected-zones.md): choose what Warder should protect.
 - [OpenClaw Support](openclaw-support.md): recommended way to run OpenClaw through Warder.
 - [Examples](examples/README.md): common protected-zone scenarios.

@@ -1,6 +1,6 @@
 # How Warder Fits
 
-Warder is best understood as a supervised-session safety layer for Linux desktops and workstations. It is not trying to replace every sandbox, VM, firewall, or host security policy.
+Warder is best understood as a tool-agnostic supervised-session layer for Linux desktops and workstations. It is not trying to replace every sandbox, VM, firewall, agent permission system, or host security policy.
 
 ## Comparison At A Glance
 
@@ -14,6 +14,12 @@ Warder is best understood as a supervised-session safety layer for Linux desktop
 | Host-wide always-on protection | Not in v1.0 beta; planned for v1.1 | Possible for workloads inside the VM/container | Strong fit when configured globally | Usually not |
 | Network blocking | Not enforced in v1.0 beta | Possible with VM/container networking | Possible with separate network policy | Usually limited |
 | Lowest isolation boundary | Process/session-level host controls | Container or VM boundary | Host policy boundary | Depends on wrapper |
+
+## Where Warder Fits Next To Agent Permissions
+
+Agent-native permission systems are still valuable. Codex, Claude Code, OpenClaw, and other tools can decide which tool calls or shell commands they are willing to attempt. Warder sits outside those apps: it launches the command under host-side controls where Linux supports them, records what coverage actually applied, and produces a local receipt.
+
+That means Warder should not copy model-mediated approval systems or market itself as a replacement for them. Its job is the cross-tool host record: one protected-zone policy, one launch-readiness report, one receipt model, and one recovery story for explicit local sessions.
 
 ## When Warder Is The Right Tool
 

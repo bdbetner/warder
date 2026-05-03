@@ -1,6 +1,6 @@
 # Security Policy
 
-Warder is a public beta Linux safety tool for supervised local agent sessions. It is designed to reduce risk with protected zones, host controls where available, and readable session receipts. It is not a guarantee that arbitrary permissive execution is safe.
+Warder is a public beta Linux tool for supervised local agent sessions. It is designed to reduce risk with protected zones, host controls where available, readable session receipts, and recovery paths where supported. It is not a guarantee that arbitrary permissive execution is safe, and it is not a host-wide sandbox.
 
 ## Current Posture
 
@@ -8,7 +8,7 @@ Warder's strongest current protection is filesystem write denial for supervised 
 
 Warder only supervises commands launched through `warder run` or the desktop launcher. It does not protect against processes started outside Warder.
 
-Several security-hardening limits remain in the public beta: global always-on supervision is not implemented, receipt signing uses local shared-secret keys rather than public-key signatures, network destination allowlists are not enforced, file and network journals have known coverage gaps, and the desktop app must keep its IPC surface narrow as the UI grows.
+Several security-hardening limits remain in the public beta: global always-on supervision is not implemented, receipt signing uses local or external shared-secret keys rather than public-key signatures, network destination allowlists are not enforced, file and network journals have known coverage gaps, and the desktop app must keep its IPC surface narrow as the UI grows.
 
 ## What Warder Uses
 
@@ -51,4 +51,6 @@ Check these items for the specific machine and session:
 
 ## Reporting Security Issues
 
-This project does not yet publish a dedicated security contact. Until that exists, open a private report through GitHub security advisories if the repository has advisories enabled, or contact the repository owner directly.
+Use GitHub private vulnerability reporting or GitHub Security Advisories for vulnerabilities that could affect Warder users. If private reporting is unavailable, contact the repository owner before publishing details.
+
+Useful reports include bypasses for Warder-launched sessions, incorrect enforcement claims, receipt-integrity failures, unsafe desktop IPC paths, unsafe snapshot or restore behavior, or cases where degraded protection is hidden from the user. Reports about processes launched outside Warder are still useful, but global always-on supervision is currently out of scope for v1.0.

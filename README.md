@@ -7,13 +7,13 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-111827.svg)](#current-status)
 
-Warder is a Linux supervised-session safety layer for running local AI agents with protected zones, write-blocking where the host supports it, and readable receipts.
+Run local AI agents with protected paths, receipts, and recovery.
+
+Warder wraps Codex CLI, Claude Code, OpenClaw, and local scripts so you can see what was protected, what degraded, what changed, and what can be reverted.
 
 Warder v1.0 is scoped to processes launched through `warder run` or the desktop launcher. Global always-on supervision, meaning host-wide protection for processes launched outside Warder, is planned for v1.1.
 
-It lets you declare protected folders, launch an agent through Warder, and get a receipt that explains what the session was allowed to do, what Warder observed, which protections were active, and where host support was missing.
-
-The first goal is practical: keep permissive local agent workflows fast while making personal data, credentials, important projects, and core system paths harder to damage.
+The first goal is practical: keep permissive local agent workflows fast while making personal data, credentials, important projects, and core system paths harder to damage. Warder is not a general endpoint security product or a host-wide sandbox.
 
 ## Start Here
 
@@ -27,7 +27,7 @@ The first goal is practical: keep permissive local agent workflows fast while ma
 
 ## Why Warder v1
 
-Warder is a supervised-session safety layer for Linux users who run local AI agents, coding tools, automation scripts, or other commands that should not have unchecked access to sensitive folders.
+Warder is a tool-agnostic supervision layer for explicit local agent sessions. It is for Linux users who want one policy and one receipt model across agent tools, without depending on each agent app to describe host-side risk the same way.
 
 It gives you real host-side guardrails without forcing every workflow into a container, remote VM, or separate development account:
 
@@ -45,10 +45,10 @@ For the v1.0 public beta, Warder is production-oriented for explicit supervised 
 
 Local AI agents often run with the same permissions as you. That is convenient, but it also means an agent can modify files, touch credentials, or make network calls unless something outside the agent draws a boundary.
 
-Warder gives you one tool-agnostic place to define that boundary.
+Warder gives you one tool-agnostic place to define that boundary and review the result.
 
 - Protect folders such as projects, notes, SSH keys, cloud credentials, or `.env` files.
-- Run Codex CLI, Claude Code, Goose, local scripts, or another command under the same policy model.
+- Run Codex CLI, Claude Code, OpenClaw, local scripts, or another command under the same policy model.
 - Preview a session before launch with `explain` and `dry-run`.
 - Deny writes to protected paths where Linux Landlock is available.
 - Snapshot supported Btrfs roots before risky sessions.
@@ -81,6 +81,14 @@ scripts/quickstart-demo.sh
 ```
 
 The demo creates a throwaway protected folder under `/tmp/warder-quickstart`, launches a supervised shell command, then prints the receipt and file journal. It intentionally skips delegated cgroup setup, so you should see one degraded protection reason while still seeing observed protected-zone activity.
+
+For a more realistic product proof, run:
+
+```bash
+scripts/attack-pack-demo.sh
+```
+
+The attack-pack demo attempts a protected write, a protected read, a workspace edit, and a network connection, then prints the receipt and journal. It reports what this host actually blocked, observed, or degraded. Track the remaining proof-path work in [Product Proof Path](docs/product-proof-path.md).
 
 Create your own starter config:
 

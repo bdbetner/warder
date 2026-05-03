@@ -10,6 +10,7 @@ Warder is currently a Linux supervised-session safety tool for local agent sessi
 - Keep receipt, dry-run, and GUI output impossible to confuse with stronger enforcement than Warder currently provides.
 - Keep degraded protections obvious before and after launch.
 - Continue validating release artifacts, checksums, and local receipt-key behavior.
+- Make the first-run story concrete enough to prove Warder's value in under three minutes.
 
 ## Security Hardening Backlog
 
@@ -25,6 +26,17 @@ These review-driven items are implemented and should remain protected by tests:
 - Cover symlink/traversal paths, snapshot restore inputs, concurrent DB access, degraded hosts, and journal blind spots with focused tests.
 
 Remaining hardening should focus on global always-on supervision design, broader live-journal compatibility evidence on privileged hosts, public-key receipt transparency, and capability-bounded execution beyond the current seccomp filter.
+
+## Next Product Proof Path
+
+These are the next execution items before broader platform work:
+
+1. Add an attack-pack demo that shows a protected write blocked where Landlock is available, read protection status called out explicitly, network activity observed but not blocked, workspace edits allowed, and receipt/recovery state printed at the end.
+2. Add `warder test-host` or `warder verify-host` to run actual local probes and label each control as `proven working`, `configured/planned`, `degraded`, or `unsupported`.
+3. Add profile-first setup commands for Codex CLI, Claude Code, and OpenClaw. Keep local scripts as the generic fallback. Goose is intentionally out of the near-term setup surface until there is specific reviewer demand.
+4. Publish a protection matrix covering common Linux hosts, filesystems, containerized runs, and OpenClaw-specific degraded states.
+5. Keep release trust moving toward stronger artifact signing only when key custody and user verification docs are clear.
+6. Split the monolithic CLI implementation into focused modules before adding more command surface.
 
 ## Next Product Improvements
 

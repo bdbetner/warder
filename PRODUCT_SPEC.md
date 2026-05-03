@@ -1,12 +1,12 @@
 # Product Overview
 
-Warder helps Linux users run local AI agents through supervised sessions with protected zones and readable receipts.
+Warder helps Linux users run local AI agents through supervised sessions with protected zones, readable receipts, and recovery paths where the host supports them.
 
 The core product promise is simple:
 
 > Before an agent runs, Warder shows what it should be allowed to do. After it runs, Warder gives the user a receipt of what happened and which protections actually held.
 
-The v1 public promise is narrower and defensible: Warder supervises commands launched through Warder, can deny protected writes with Landlock where available, and records honest receipts when host coverage is degraded.
+The v1 public promise is narrow and defensible: Warder supervises commands launched through Warder, can deny protected writes with Landlock where available, can optionally attempt experimental read denial with explicit readable roots, and records honest receipts when host coverage is degraded.
 
 ## Problem
 
@@ -43,7 +43,7 @@ Examples:
 
 A supervised session is a command launched through Warder with an agent label and config.
 
-The command can be Codex CLI, Claude Code, Goose, a local script, a shell command, or another local agent tool.
+The command can be Codex CLI, Claude Code, OpenClaw, a local script, a shell command, or another local agent tool.
 
 ### Receipts
 
@@ -71,6 +71,7 @@ It can:
 - run a supervised command through `warder run --launch`
 - tag supervised sessions with cgroups where available
 - deny writes to protected paths with Landlock where available
+- optionally apply experimental Landlock read denial when explicitly configured with disjoint readable roots
 - journal protected-zone file activity with inotify
 - store typed network-egress journal data and report live-network coverage limits
 - optionally collect live eBPF TCP and UDP egress attempts where built and permitted
@@ -92,7 +93,7 @@ Warder is not:
 - a browser, email, or calendar automation tool
 - a guarantee that unsupported hosts can safely run permissive agents
 - an always-on guard for commands launched outside Warder
-- read-blocking enforcement in v1
+- read blocking by default
 - destination-aware network blocking in v1
 
 ## Product Direction
@@ -105,6 +106,10 @@ Future work should improve that answer before expanding the surface area.
 
 Good next directions include:
 
+- one-command setup for Codex CLI, Claude Code, and OpenClaw
+- a three-minute proof demo with blocked write, observed network activity, and receipt review
+- a host verification command that runs real local probes instead of only planning checks
+- a public protection matrix by distro, kernel, filesystem, and container state
 - richer receipt exports
 - dependency-change review
 - safer protected-zone templates for common secret locations
