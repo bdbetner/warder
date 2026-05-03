@@ -59,8 +59,8 @@ pub fn write_profile_setup_config(
         output.display(),
         shell_quote(&output.display().to_string()),
         shell_quote(&output.display().to_string()),
-        setup_agent_profile(request.agent),
-        setup_agent_command(request.agent),
+        setup_agent_profile_id(request.agent),
+        setup_agent_command_name(request.agent),
     ))
 }
 
@@ -71,7 +71,7 @@ pub fn render_profile_setup_config(request: &ProfileSetupRequest) -> Result<Stri
         });
     }
     let workspace = normalize_setup_path(&request.workspace)?;
-    let profile = setup_agent_profile(request.agent);
+    let profile = setup_agent_profile_id(request.agent);
     let templates = known_agent_profile_catalog()
         .into_iter()
         .find(|entry| entry.id == profile)
@@ -119,7 +119,7 @@ profile = {agent_profile}\n",
         workspace = toml_string(&workspace.display().to_string()),
         agent_id = toml_string(profile),
         agent_label = toml_string(setup_agent_label(request.agent)),
-        agent_command = toml_string(setup_agent_command(request.agent)),
+        agent_command = toml_string(setup_agent_command_name(request.agent)),
         agent_profile = toml_string(profile),
     ))
 }
@@ -149,7 +149,7 @@ fn setup_agent_slug(agent: SetupAgent) -> &'static str {
     }
 }
 
-fn setup_agent_profile(agent: SetupAgent) -> &'static str {
+pub fn setup_agent_profile_id(agent: SetupAgent) -> &'static str {
     match agent {
         SetupAgent::Codex => "codex-cli",
         SetupAgent::Claude => "claude-code",
@@ -157,7 +157,7 @@ fn setup_agent_profile(agent: SetupAgent) -> &'static str {
     }
 }
 
-fn setup_agent_command(agent: SetupAgent) -> &'static str {
+pub fn setup_agent_command_name(agent: SetupAgent) -> &'static str {
     match agent {
         SetupAgent::Codex => "codex",
         SetupAgent::Claude => "claude",

@@ -232,6 +232,65 @@ fn parses_setup_command_for_codex() {
 }
 
 #[test]
+fn parses_agent_shortcut_as_launching_run() {
+    assert_eq!(
+        parse_args([
+            "warder",
+            "codex",
+            "--config",
+            "custom.toml",
+            "--accept-degraded",
+            "--",
+            "--ask-for-approval",
+            "on-request",
+        ])
+        .unwrap(),
+        CliCommand::Run {
+            config: Some(PathBuf::from("custom.toml")),
+            db: None,
+            cgroup_root: None,
+            snapshot_root: None,
+            launch: true,
+            require_enforcement: false,
+            receipt_key: None,
+            accept_degraded: true,
+            agent: "codex-cli".to_string(),
+            command: vec![
+                "codex".to_string(),
+                "--ask-for-approval".to_string(),
+                "on-request".to_string()
+            ],
+        }
+    );
+}
+
+#[test]
+fn parses_agent_shortcut_defaults_to_setup_config_and_command() {
+    assert_eq!(
+        parse_args(["warder", "claude"]).unwrap(),
+        CliCommand::Run {
+            config: Some(PathBuf::from("warder-claude.toml")),
+            db: None,
+            cgroup_root: None,
+            snapshot_root: None,
+            launch: true,
+            require_enforcement: false,
+            receipt_key: None,
+            accept_degraded: false,
+            agent: "claude-code".to_string(),
+            command: vec!["claude".to_string()],
+        }
+    );
+}
+
+#[test]
+fn agent_shortcut_rejects_agent_flags_before_separator() {
+    let error = parse_args(["warder", "openclaw", "--model", "test"]).unwrap_err();
+
+    assert!(error.message.contains("put agent arguments after '--'"));
+}
+
+#[test]
 fn parses_init_command_with_starter_config_options() {
     assert_eq!(
         parse_args([

@@ -110,6 +110,16 @@ warder setup openclaw --workspace . --protect-secrets
 
 `warder setup` generates a reviewable policy for the selected agent, the current workspace, and common secret folders such as SSH, cloud, GitHub CLI, and Kubernetes credentials. Codex CLI, Claude Code, and OpenClaw are the first supported setup choices; use `warder init` for local scripts or custom commands.
 
+After reviewing the generated file, launch through the matching shortcut:
+
+```bash
+warder codex --accept-degraded -- --help
+warder claude --accept-degraded -- --help
+warder openclaw --accept-degraded -- --help
+```
+
+Shortcut commands are thin wrappers around `warder run --launch`; use the normal `warder run` command when you need a custom agent id or command.
+
 Create a lower-level starter config:
 
 ```bash

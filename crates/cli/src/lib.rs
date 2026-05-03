@@ -46,8 +46,9 @@ pub use host_probe::{
     HostVerificationFormat, HostVerificationReport, InternalHostProbeKind, InternalHostProbeResult,
 };
 pub use setup::{
-    default_setup_output, render_profile_setup_config, setup_agent_from_str, setup_agent_label,
-    write_profile_setup_config, ProfileSetupRequest, SetupAgent,
+    default_setup_output, render_profile_setup_config, setup_agent_command_name,
+    setup_agent_from_str, setup_agent_label, setup_agent_profile_id, write_profile_setup_config,
+    ProfileSetupRequest, SetupAgent,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -282,6 +283,9 @@ where
         "doctor" => parse_doctor(args),
         "test-host" | "verify-host" => parse_test_host(args),
         "setup" => parse_setup(args),
+        "codex" => parse_agent_shortcut(SetupAgent::Codex, args),
+        "claude" => parse_agent_shortcut(SetupAgent::Claude, args),
+        "openclaw" => parse_agent_shortcut(SetupAgent::OpenClaw, args),
         "init" => parse_init(args),
         "profiles" => parse_profiles(args),
         "run" => parse_run(args),
@@ -2181,6 +2185,7 @@ impl DaemonTerminator for CommandDaemonTerminator {
 pub fn usage() -> &'static str {
     "usage: warder <command>\n\
 primary: warder run --config <path> --launch --agent <id> [--require-enforcement --receipt-key <path>] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
+agent shortcut: warder codex|claude|openclaw [--config <path>] [--accept-degraded] [--require-enforcement --receipt-key <path>] -- [agent args]\n\
 record only: warder run --config <path> --agent <id> -- <agent command>\n\
 preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
 readiness: warder doctor [--config <path>]\n\
@@ -3013,6 +3018,80 @@ fn parse_setup(args: Vec<String>) -> Result<CliCommand, CliError> {
         protect_secrets,
         force,
         print,
+    })
+}
+
+fn parse_agent_shortcut(agent: SetupAgent, args: Vec<String>) -> Result<CliCommand, CliError> {
+    let separator = args.iter().position(|arg| arg == "--");
+    let options = separator
+        .map(|index| &args[..index])
+        .unwrap_or_else(|| args.as_slice());
+    let agent_args = separator
+        .map(|index| args[(index + 1)..].to_vec())
+        .unwrap_or_default();
+    let mut config = Some(default_setup_output(agent));
+    let mut db = None;
+    let mut cgroup_root = None;
+    let mut snapshot_root = None;
+    let mut require_enforcement = false;
+    let mut receipt_key = None;
+    let mut accept_degraded = false;
+    let mut index = 0;
+    while index < options.len() {
+        match options[index].as_str() {
+            "--config" => {
+                config = Some(PathBuf::from(value_after(options, index, "--config")?));
+                index += 2;
+            }
+            "--db" => {
+                db = Some(PathBuf::from(value_after(options, index, "--db")?));
+                index += 2;
+            }
+            "--cgroup-root" => {
+                cgroup_root = Some(PathBuf::from(value_after(options, index, "--cgroup-root")?));
+                index += 2;
+            }
+            "--snapshot-root" => {
+                snapshot_root = Some(PathBuf::from(value_after(
+                    options,
+                    index,
+                    "--snapshot-root",
+                )?));
+                index += 2;
+            }
+            "--require-enforcement" => {
+                require_enforcement = true;
+                index += 1;
+            }
+            "--receipt-key" => {
+                receipt_key = Some(PathBuf::from(value_after(options, index, "--receipt-key")?));
+                index += 2;
+            }
+            "--accept-degraded" => {
+                accept_degraded = true;
+                index += 1;
+            }
+            unknown => {
+                return err(format!(
+                    "unknown {} shortcut option '{unknown}'; put agent arguments after '--'",
+                    setup_agent_label(agent)
+                ))
+            }
+        }
+    }
+    let mut command = vec![setup_agent_command_name(agent).to_string()];
+    command.extend(agent_args);
+    Ok(CliCommand::Run {
+        config,
+        db,
+        cgroup_root,
+        snapshot_root,
+        launch: true,
+        require_enforcement,
+        receipt_key,
+        accept_degraded,
+        agent: setup_agent_profile_id(agent).to_string(),
+        command,
     })
 }
 
