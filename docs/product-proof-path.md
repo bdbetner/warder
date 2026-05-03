@@ -32,7 +32,7 @@ It is not a general endpoint security product, a cloud AI governance tool, a mod
    - Do not include Goose in the near-term setup surface until there is specific demand and a tested flow.
 
 4. **Protection matrix**
-   - Publish a matrix for common Linux hosts and filesystems.
+   - Use [Protection Matrix](protection-matrix.md) as the public expectation table.
    - Include containerized and OpenClaw paths as explicitly degraded unless Warder can prove the required host controls.
    - Keep network blocking listed as `no` until there is a real enforcement backend.
 

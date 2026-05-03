@@ -21,6 +21,7 @@ The first goal is practical: keep permissive local agent workflows fast while ma
 - Installing a release build: read [Install Notes](docs/install.md), [Linux Compatibility](docs/linux-compatibility.md), and [Release Trust Model](docs/release-trust.md).
 - Reviewing Warder: read [Reviewer Feedback Guide](docs/reviewer-feedback.md).
 - Evaluating the safety model: read [Security Model](docs/security-model.md) and [Threat Model](THREAT_MODEL.md).
+- Checking host coverage: run `warder test-host`, then read [Protection Matrix](docs/protection-matrix.md).
 - Running OpenClaw: read [OpenClaw Support](docs/openclaw-support.md).
 - Looking for the project direction: read [Product Overview](PRODUCT_SPEC.md), [Vision](docs/vision.md), and [Roadmap](ROADMAP.md).
 - Looking for common scenarios: read [Examples](docs/examples/README.md) and [FAQ](docs/FAQ.md).
@@ -267,6 +268,7 @@ npm run tauri -- build --bundles deb,rpm,appimage --ci
 - [Examples](docs/examples/README.md)
 - [Install Notes](docs/install.md)
 - [Linux Compatibility](docs/linux-compatibility.md)
+- [Protection Matrix](docs/protection-matrix.md)
 - [How Warder Fits](docs/comparison.md)
 - [Reviewer Feedback Guide](docs/reviewer-feedback.md)
 - [Release Trust Model](docs/release-trust.md)

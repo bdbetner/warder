@@ -2,7 +2,7 @@
 
 Warder v1.0 public beta targets Linux x86_64 systems. The release artifacts are built for Linux and published as a CLI binary, GUI binary, Ubuntu/Debian `.deb`, RPM package, and portable GUI AppImage.
 
-Warder is intentionally runtime-checked rather than pretending every Linux host has the same security features. Run `warder doctor` on the target machine before trusting a session.
+Warder is intentionally runtime-checked rather than pretending every Linux host has the same security features. Run `warder test-host` and `warder doctor` on the target machine before trusting a session. For common host expectations, see [Protection Matrix](protection-matrix.md).
 
 ## Recommended Baseline
 
@@ -46,6 +46,7 @@ These are guidance points, not guarantees. Distro kernels may disable or restric
 After installing Warder, run:
 
 ```bash
+warder test-host
 warder doctor
 ```
 
