@@ -20,6 +20,7 @@ run_warder() {
 
 rm -rf "$FLOW_ROOT"
 mkdir -p "$PROTECTED_ROOT"
+chmod 700 "$FLOW_ROOT"
 
 cd "$ROOT_DIR"
 

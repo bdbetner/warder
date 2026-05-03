@@ -386,6 +386,7 @@ fn validate_zone_path(report: &mut ConfigValidationReport, zone_id: &str, path: 
         ));
     }
 
+    reject_or_warn_if_common_scratch_path(report, zone_id, path);
     warn_if_common_secret_path(report, zone_id, path);
 
     if path
@@ -394,6 +395,41 @@ fn validate_zone_path(report: &mut ConfigValidationReport, zone_id: &str, path: 
     {
         report.error(format!(
             "protected zone '{}' path '{}' must not contain parent traversal",
+            zone_id,
+            path.display()
+        ));
+    }
+}
+
+fn reject_or_warn_if_common_scratch_path(
+    report: &mut ConfigValidationReport,
+    zone_id: &str,
+    path: &Path,
+) {
+    if matches!(path.to_str(), Some("/tmp" | "/var/tmp" | "/dev/shm")) {
+        report.error(format!(
+            "protected zone '{}' uses shared scratch path '{}'; protect an explicit project subpath instead",
+            zone_id,
+            path.display()
+        ));
+        return;
+    }
+
+    let path_text = path.to_string_lossy();
+    let scratch_markers = [
+        "/.cache",
+        "/node_modules",
+        "/target",
+        "/.cargo/registry",
+        "/.npm",
+        "/.pnpm-store",
+    ];
+    if scratch_markers
+        .iter()
+        .any(|marker| path_text.ends_with(marker) || path_text.contains(&format!("{marker}/")))
+    {
+        report.warning(format!(
+            "protected zone '{}' covers common scratch/cache path '{}'; this can break normal agent and build-tool workflows",
             zone_id,
             path.display()
         ));
@@ -852,6 +888,63 @@ agents:
             .iter()
             .any(|issue| issue.severity == ConfigIssueSeverity::Error
                 && issue.message.contains("whole-home")));
+    }
+
+    #[test]
+    fn rejects_shared_scratch_roots_as_protected_zones() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [[zones]]
+                id = "scratch"
+                name = "Scratch"
+                paths = ["/tmp"]
+                write_policy = "deny"
+                snapshot = "best-effort"
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
+        assert!(report.has_errors());
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.severity == ConfigIssueSeverity::Error
+                && issue.message.contains("shared scratch path")));
+    }
+
+    #[test]
+    fn warns_on_common_cache_paths() {
+        let config = WarderConfig::from_toml(
+            r#"
+                [[zones]]
+                id = "cache"
+                name = "Cache"
+                paths = ["/home/user/.cache"]
+                write_policy = "deny"
+                snapshot = "best-effort"
+
+                [[agents]]
+                id = "local"
+                label = "Local"
+                command = "sh"
+            "#,
+        )
+        .unwrap();
+
+        let report = config.validate(&supported_environment());
+
+        assert!(report
+            .issues
+            .iter()
+            .any(|issue| issue.severity == ConfigIssueSeverity::Warning
+                && issue.message.contains("scratch/cache")));
     }
 
     #[test]

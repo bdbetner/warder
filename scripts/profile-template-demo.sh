@@ -10,6 +10,7 @@ CONFIG_PATH="$DEMO_ROOT/profile-template.toml"
 
 rm -rf "$DEMO_ROOT"
 mkdir -p "$PROTECTED_ROOT" "$WRITABLE_ROOT"
+chmod 700 "$DEMO_ROOT"
 
 cd "$ROOT_DIR"
 

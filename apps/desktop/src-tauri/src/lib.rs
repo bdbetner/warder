@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use warder_cli::{
@@ -166,8 +168,12 @@ pub fn save_gui_config_file(config_path: PathBuf, draft: GuiConfigDraft) -> Resu
     validate_desktop_path(&config_path, "config path")?;
     let rendered = render_gui_config_toml(&draft)?;
     if let Some(parent) = config_path.parent() {
+        let parent_existed = parent.exists();
         fs::create_dir_all(parent)
             .map_err(|error| format!("failed to create config directory: {error}"))?;
+        if !parent_existed || parent.file_name().is_some_and(|name| name == ".warder") {
+            restrict_desktop_state_dir(parent)?;
+        }
     }
     fs::write(&config_path, rendered).map_err(|error| {
         format!(
@@ -175,6 +181,20 @@ pub fn save_gui_config_file(config_path: PathBuf, draft: GuiConfigDraft) -> Resu
             config_path.display()
         )
     })
+}
+
+fn restrict_desktop_state_dir(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|error| {
+            format!(
+                "failed to restrict desktop state directory '{}': {error}",
+                path.display()
+            )
+        })?;
+    }
+    let _ = path;
+    Ok(())
 }
 
 pub fn render_dry_run_text(

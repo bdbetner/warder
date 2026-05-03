@@ -17,6 +17,11 @@ The first engineering passes focused on defects that were concrete, local, and t
 - Strict launches require an external receipt key, and `warder verify-receipts --external-key` validates that key path while checking the local hash chain.
 - Supervised child setup installs a small seccomp filter for namespace and mount escape syscalls.
 - Experimental read denial is available through `read_deny = true` or `read_policy = "deny"` with explicit disjoint readable roots.
+- Landlock rule paths are revalidated immediately before `landlock_restrict_self` in the supervised child setup path.
+- Launch state paths must be outside protected/writable policy surfaces and, on Unix, inside private parent directories.
+- Warder attempts best-effort cgroup resource limits for launched sessions and records applied limits or degraded failures.
+- Receipts include a non-numeric journal coverage estimate and concrete blind-spot list instead of implying complete forensic coverage.
+- Config validation rejects shared scratch roots such as `/tmp` and warns on common cache/build scratch paths.
 
 The product-completion pass is now in public-beta preparation. The remaining strategic item is global always-on supervision for processes not launched through Warder; it remains out of scope until a real privileged host service can be designed and tested.
 
@@ -36,6 +41,7 @@ The final production-hardening pass resolved the concrete items that were previo
 - Snapshot restore path construction must continue to reject unsafe snapshot ids before path joins.
 - DB migrations should keep using fixed allowlisted identifiers.
 - Local DB/state storage should keep restrictive permissions and concurrency settings.
+- Local DB/state storage is still not tamper-proof against unrelated same-UID malware, even with private directory checks.
 - Session ids are random local receipt identifiers, not authentication tokens.
 - Cgroup tagging for `warder run --launch` is prepared before spawn and applied in the child setup path before exec. Commands launched directly outside Warder are still completely unsupervised.
 - Network destination allowlists are parsed but not enforced.
@@ -44,6 +50,7 @@ The final production-hardening pass resolved the concrete items that were previo
 - Daemon runtime state uses atomic writes and stale-PID checks.
 - The daemon remains an experimental runtime skeleton, not an active enforcement service.
 - eBPF and inotify coverage have known syscall/event blind spots that should be visible in receipts.
+- Snapshot fallback beyond Btrfs/OverlayFS remains a reliability improvement, not a hidden enforcement guarantee.
 - Default secret-path templates need broader, user-extensible coverage.
 - Release workflows should pin actions and verify release tags against passing CI.
 - The desktop CSP must not be null, and Tauri capability tests should keep plugin permissions narrow.

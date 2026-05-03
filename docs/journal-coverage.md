@@ -33,4 +33,4 @@ Warder journals are visibility records, not enforcement evidence. Landlock is th
 
 ## Receipt Rule
 
-Every receipt must keep stating the visibility limits. A quiet file or network journal means "nothing was observed through these surfaces," not "nothing happened."
+Every receipt must keep stating the visibility limits. A quiet file or network journal means "nothing was observed through these surfaces," not "nothing happened." Warder does not publish a numeric coverage percentage because local kernel signals cannot make that estimate reliable across kernels, load, containers, namespaces, and BPF attach states; receipts instead include a concrete blind-spot list.

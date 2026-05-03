@@ -31,6 +31,7 @@ fi
 
 rm -rf "$TEST_ROOT"
 mkdir -p "$INSTALL_ROOT" "$ADMIN_DIR"
+chmod 700 "$TEST_ROOT"
 
 dpkg_root=(fakeroot dpkg --admindir="$ADMIN_DIR" --instdir="$INSTALL_ROOT" --log="$DPKG_LOG")
 
@@ -45,6 +46,7 @@ test -f "$INSTALL_ROOT/usr/share/icons/hicolor/32x32/apps/warder-desktop.png"
 
 SESSION_ROOT="$TEST_ROOT/session"
 mkdir -p "$SESSION_ROOT/protected" "$SESSION_ROOT/writable"
+chmod 700 "$SESSION_ROOT"
 
 "$INSTALL_ROOT/usr/bin/warder" init \
   --print \

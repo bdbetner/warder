@@ -32,6 +32,8 @@ For development, use a dedicated writable cgroup subtree rather than the global 
 
 CLI and desktop launches create the per-session cgroup before spawning the child. The child setup path then writes `0` to that session cgroup's `cgroup.procs` before `exec`, installs Warder's supervised seccomp filter, and applies Landlock where available. That closes the previous post-spawn attribution window for Warder-launched commands.
 
+When Warder prepares the cgroup, it also attempts best-effort resource limits (`memory.max` and `pids.max` by default). Successful limits are shown in receipts from the recorded cgroup files, and failures are recorded as degraded coverage. This is host DoS reduction, not a replacement for a full resource-isolation policy.
+
 This still is not a global sandbox. Delegation answers "can Warder write the cgroup tree"; it does not force unrelated direct processes into Warder. Future privileged/global modes may use `clone3(CLONE_INTO_CGROUP)` or a narrower helper where that gives better kernel-level guarantees.
 
 ## systemd Delegated Scope Example

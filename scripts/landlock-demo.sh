@@ -11,6 +11,7 @@ CONFIG_PATH="$DEMO_ROOT/landlock-demo.toml"
 
 rm -rf "$DEMO_ROOT" "$WRITABLE_ROOT"
 mkdir -p "$PROTECTED_ROOT" "$WRITABLE_ROOT" "$CGROUP_ROOT"
+chmod 700 "$DEMO_ROOT"
 touch "$CGROUP_ROOT/cgroup.procs"
 
 cat > "$CONFIG_PATH" <<EOF

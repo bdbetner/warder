@@ -82,6 +82,13 @@ pub trait LandlockKernel {
         allowed_access: u64,
     ) -> Result<(), LandlockApplyError>;
 
+    fn revalidate_rules_before_restrict(
+        &mut self,
+        _rules: &[LandlockRule],
+    ) -> Result<(), LandlockApplyError> {
+        Ok(())
+    }
+
     fn restrict_self(&mut self, ruleset_fd: i32) -> Result<(), LandlockApplyError>;
 }
 
@@ -300,6 +307,7 @@ pub fn apply_landlock_plan_with_kernel(
             return Ok(LandlockApplyStatus::Blocked(message))
         }
     };
+    kernel.revalidate_rules_before_restrict(&plan.rules)?;
     kernel.restrict_self(ruleset_fd)?;
 
     Ok(LandlockApplyStatus::Applied)
@@ -337,6 +345,38 @@ pub fn restrict_current_process_to_landlock_ruleset(
 ) -> Result<(), LandlockApplyError> {
     let mut kernel = SyscallLandlockKernel;
     kernel.restrict_self(ruleset_fd)
+}
+
+pub fn restrict_current_process_to_landlock_ruleset_with_revalidation(
+    ruleset_fd: i32,
+    rules: &[LandlockRule],
+) -> Result<(), LandlockApplyError> {
+    let mut kernel = SyscallLandlockKernel;
+    kernel.revalidate_rules_before_restrict(rules)?;
+    kernel.restrict_self(ruleset_fd)
+}
+
+pub fn revalidate_landlock_rules_before_restrict(
+    rules: &[LandlockRule],
+) -> Result<(), LandlockApplyError> {
+    let mut canonical_rules = Vec::with_capacity(rules.len());
+    for rule in rules {
+        canonical_rules.push(LandlockRule {
+            path: checked_landlock_rule_path(&rule.path)?,
+            access: rule.access,
+        });
+    }
+    if let Some(message) = validate_landlock_write_rules(&canonical_rules) {
+        return Err(LandlockApplyError {
+            message: format!("Landlock final revalidation failed: {message}"),
+        });
+    }
+    if let Some(message) = validate_landlock_read_rules(&canonical_rules) {
+        return Err(LandlockApplyError {
+            message: format!("Landlock final revalidation failed: {message}"),
+        });
+    }
+    Ok(())
 }
 
 fn landlock_write_rights() -> u64 {
@@ -432,6 +472,13 @@ impl LandlockKernel for SyscallLandlockKernel {
             )
         };
         syscall_unit("landlock_add_rule", result)
+    }
+
+    fn revalidate_rules_before_restrict(
+        &mut self,
+        rules: &[LandlockRule],
+    ) -> Result<(), LandlockApplyError> {
+        revalidate_landlock_rules_before_restrict(rules)
     }
 
     fn restrict_self(&mut self, ruleset_fd: i32) -> Result<(), LandlockApplyError> {
@@ -547,12 +594,21 @@ impl CgroupTagger {
         Ok(CgroupTagResult {
             cgroup_path: Some(session_path),
             status: CgroupTagStatus::Tagged,
+            resource_limits: prepared.resource_limits,
         })
     }
 
     pub fn prepare_session_cgroup(
         &self,
         session_id: &str,
+    ) -> Result<CgroupTagResult, CgroupTagError> {
+        self.prepare_session_cgroup_with_limits(session_id, &CgroupResourceLimits::default())
+    }
+
+    pub fn prepare_session_cgroup_with_limits(
+        &self,
+        session_id: &str,
+        limits: &CgroupResourceLimits,
     ) -> Result<CgroupTagResult, CgroupTagError> {
         validate_session_id(session_id)?;
 
@@ -563,6 +619,7 @@ impl CgroupTagger {
                     "cgroup root '{}' does not exist",
                     self.root.display()
                 )),
+                resource_limits: CgroupResourceLimitReport::default(),
             });
         }
 
@@ -573,6 +630,7 @@ impl CgroupTagger {
                     "cgroup root '{}' does not look like cgroup v2: missing cgroup.procs",
                     self.root.display()
                 )),
+                resource_limits: CgroupResourceLimitReport::default(),
             });
         }
 
@@ -589,12 +647,76 @@ impl CgroupTagger {
                 session_path.join("cgroup.procs").display()
             ),
         })?;
+        let resource_limits = apply_cgroup_resource_limits(&session_path, limits);
 
         Ok(CgroupTagResult {
             cgroup_path: Some(session_path),
             status: CgroupTagStatus::Tagged,
+            resource_limits,
         })
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CgroupResourceLimits {
+    pub memory_max: Option<String>,
+    pub pids_max: Option<String>,
+    pub cpu_max: Option<String>,
+    pub io_max: Option<String>,
+}
+
+impl CgroupResourceLimits {
+    pub fn default_agent_limits() -> Self {
+        Self {
+            memory_max: Some("8589934592".to_string()),
+            pids_max: Some("512".to_string()),
+            cpu_max: None,
+            io_max: None,
+        }
+    }
+
+    fn entries(&self) -> [(&'static str, Option<&str>); 4] {
+        [
+            ("memory.max", self.memory_max.as_deref()),
+            ("pids.max", self.pids_max.as_deref()),
+            ("cpu.max", self.cpu_max.as_deref()),
+            ("io.max", self.io_max.as_deref()),
+        ]
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CgroupResourceLimitReport {
+    pub applied: Vec<String>,
+    pub degraded: Vec<String>,
+}
+
+fn apply_cgroup_resource_limits(
+    session_path: &Path,
+    limits: &CgroupResourceLimits,
+) -> CgroupResourceLimitReport {
+    let mut report = CgroupResourceLimitReport::default();
+    for (file_name, value) in limits.entries() {
+        let Some(value) = value else {
+            continue;
+        };
+        let path = session_path.join(file_name);
+        let mut options = OpenOptions::new();
+        options.write(true);
+        if !path.exists() {
+            options.create(true).truncate(true);
+        }
+        let result = options
+            .open(&path)
+            .and_then(|mut file| writeln!(file, "{value}"));
+        match result {
+            Ok(()) => report.applied.push(format!("{file_name}={value}")),
+            Err(error) => report.degraded.push(format!(
+                "failed to apply cgroup resource limit {file_name}={value}: {error}"
+            )),
+        }
+    }
+    report
 }
 
 pub fn tag_current_process_into_cgroup(cgroup_path: &Path) -> io::Result<()> {
@@ -627,6 +749,7 @@ fn validate_session_id(session_id: &str) -> Result<(), CgroupTagError> {
 pub struct CgroupTagResult {
     pub cgroup_path: Option<PathBuf>,
     pub status: CgroupTagStatus,
+    pub resource_limits: CgroupResourceLimitReport,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1187,6 +1310,36 @@ mod tests {
         assert_eq!(checked, nested.canonicalize().unwrap());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn landlock_final_revalidation_rejects_rule_replaced_by_symlink() {
+        let root = temp_path("final-revalidation-symlink");
+        let protected = root.join("protected");
+        let writable = root.join("writable");
+        let outside = root.join("outside");
+        fs::create_dir_all(&protected).unwrap();
+        fs::create_dir_all(&writable).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let rules = vec![
+            LandlockRule {
+                path: protected.clone(),
+                access: LandlockAccess::ReadOnly,
+            },
+            LandlockRule {
+                path: writable,
+                access: LandlockAccess::ReadWrite,
+            },
+        ];
+
+        revalidate_landlock_rules_before_restrict(&rules).unwrap();
+        fs::remove_dir(&protected).unwrap();
+        std::os::unix::fs::symlink(&outside, &protected).unwrap();
+
+        let error = revalidate_landlock_rules_before_restrict(&rules).unwrap_err();
+
+        assert!(error.message.contains("must not be a symlink"));
+    }
+
     #[test]
     fn missing_cgroup_root_reports_unsupported() {
         let root = temp_path("missing-root");
@@ -1250,6 +1403,42 @@ mod tests {
             fs::read_to_string(session_path.join("cgroup.procs")).unwrap(),
             ""
         );
+        assert!(result.resource_limits.applied.is_empty());
+        assert!(result.resource_limits.degraded.is_empty());
+    }
+
+    #[test]
+    fn prepare_session_cgroup_applies_resource_limits_when_requested() {
+        let root = temp_path("prepare-cgroup-limits");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("cgroup.procs"), "").unwrap();
+        let adapter = CgroupTagger::new(root.clone());
+        let limits = CgroupResourceLimits {
+            memory_max: Some("1048576".to_string()),
+            pids_max: Some("32".to_string()),
+            cpu_max: None,
+            io_max: None,
+        };
+
+        let result = adapter
+            .prepare_session_cgroup_with_limits("session-1", &limits)
+            .unwrap();
+
+        let session_path = root.join("warder").join("session-1");
+        assert_eq!(result.cgroup_path, Some(session_path.clone()));
+        assert_eq!(
+            fs::read_to_string(session_path.join("memory.max")).unwrap(),
+            "1048576\n"
+        );
+        assert_eq!(
+            fs::read_to_string(session_path.join("pids.max")).unwrap(),
+            "32\n"
+        );
+        assert_eq!(
+            result.resource_limits.applied,
+            vec!["memory.max=1048576", "pids.max=32"]
+        );
+        assert!(result.resource_limits.degraded.is_empty());
     }
 
     #[test]

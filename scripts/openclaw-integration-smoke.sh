@@ -11,6 +11,7 @@ STUB_DIR="$DEMO_ROOT/bin"
 
 rm -rf "$DEMO_ROOT"
 mkdir -p "$PROTECTED_ROOT" "$WORKSPACE_ROOT" "$STUB_DIR"
+chmod 700 "$DEMO_ROOT"
 
 if command -v openclaw >/dev/null 2>&1; then
   OPENCLAW_BIN="$(command -v openclaw)"

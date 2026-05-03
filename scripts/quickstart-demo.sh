@@ -9,6 +9,7 @@ CONFIG_PATH="$DEMO_ROOT/quickstart.toml"
 
 rm -rf "$DEMO_ROOT"
 mkdir -p "$PROTECTED_ROOT"
+chmod 700 "$DEMO_ROOT"
 
 cat > "$CONFIG_PATH" <<EOF
 [enforcement]

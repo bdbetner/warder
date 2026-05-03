@@ -64,11 +64,11 @@ Common secret paths remain high risk: `.ssh/`, `.gnupg/`, `.aws/`, `.azure/`, `.
 
 ### Policy Misconfiguration
 
-Users can define zones that are too broad, too narrow, or contradictory. Config validation rejects filesystem-root and whole-home protected zones, warns on common secret paths where read blocking is not enabled, and reports missing snapshot backends, overlapping zones, and unsupported enforcement.
+Users can define zones that are too broad, too narrow, or contradictory. Config validation rejects filesystem-root, whole-home, and shared scratch-root protected zones, warns on common secret/cache paths where policy can confuse users or break builds, and reports missing snapshot backends, overlapping zones, and unsupported enforcement.
 
 ### Audit Tampering
 
-Local logs can be modified by a user or malware with filesystem access. Warder provides useful local accountability, not tamper-proof forensics.
+Local logs can be modified by a same-UID process, user, or malware with filesystem access. Warder requires private state directories and rejects state placement inside supervised writable surfaces, but it still provides useful local accountability rather than tamper-proof forensics.
 
 ## Out Of Scope
 

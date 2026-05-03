@@ -9,7 +9,7 @@ use serde::Serialize;
 use sha2::Sha256;
 use std::io::{self, Read};
 #[cfg(unix)]
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use warder_config::{
@@ -23,9 +23,10 @@ use warder_core::{
 use warder_db::WarderDb;
 use warder_enforcement::{
     apply_supervised_seccomp_filter, plan_landlock_restrictions,
-    prepare_landlock_ruleset_with_kernel, tag_current_process_into_cgroup, CgroupTagResult,
-    CgroupTagStatus, CgroupTagger, LandlockAccess, LandlockPlanStatus, LandlockPrepareStatus,
-    LandlockRequirement, LandlockRule, LandlockSupport, SyscallLandlockKernel,
+    prepare_landlock_ruleset_with_kernel, tag_current_process_into_cgroup, CgroupResourceLimits,
+    CgroupTagResult, CgroupTagStatus, CgroupTagger, LandlockAccess, LandlockPlanStatus,
+    LandlockPrepareStatus, LandlockRequirement, LandlockRule, LandlockSupport,
+    SyscallLandlockKernel,
 };
 use warder_journal::{
     FileJournalEvent, InotifyFileJournalWatcher, NetworkJournalEvent, ProcfsNetworkSocketReader,
@@ -1075,6 +1076,10 @@ fn render_session_receipt_with_activity(
             cgroup_status_label(&session.cgroup_status, session.cgroup_path.as_ref())
         ),
         format!(
+            "cgroup resource limits: {}",
+            render_cgroup_resource_limits(session.cgroup_path.as_ref())
+        ),
+        format!(
             "landlock: {}",
             landlock_status_label(&session.landlock_status)
         ),
@@ -1171,6 +1176,16 @@ fn render_session_receipt_with_activity(
         lines.push("coverage degraded reasons:".to_string());
         lines.extend(degraded_reasons.iter().map(|reason| format!("- {reason}")));
     }
+    lines.push(format!(
+        "journal coverage estimate: {}",
+        journal_coverage_estimate()
+    ));
+    lines.push("possible journal blind spots:".to_string());
+    lines.extend(
+        journal_possible_blind_spots()
+            .iter()
+            .map(|blind_spot| format!("- {blind_spot}")),
+    );
     let review_guidance = receipt_review_guidance(session, &file_activity, &network_activity);
     lines.push("review guidance:".to_string());
     lines.extend(
@@ -1269,6 +1284,7 @@ struct StructuredReceiptAgent {
 #[derive(Serialize)]
 struct StructuredReceiptEnforcement {
     cgroup: StructuredReceiptStatus,
+    cgroup_resource_limits: std::collections::BTreeMap<String, String>,
     landlock: StructuredReceiptStatus,
     snapshot: StructuredReceiptStatus,
 }
@@ -1330,6 +1346,8 @@ struct StructuredReadiness {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct StructuredDegradedCoverage {
     total_reasons: usize,
+    journal_coverage_estimate: &'static str,
+    possible_journal_blind_spots: Vec<&'static str>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -1379,6 +1397,7 @@ impl From<&SessionRecord> for StructuredSessionReceipt {
                     &session.cgroup_status,
                     session.cgroup_path.as_ref(),
                 ),
+                cgroup_resource_limits: cgroup_resource_limits(session.cgroup_path.as_ref()),
                 landlock: structured_landlock_status(&session.landlock_status),
                 snapshot: structured_snapshot_status(&session.snapshot_status),
             },
@@ -1393,6 +1412,8 @@ impl From<&SessionRecord> for StructuredSessionReceipt {
             readiness: StructuredReadiness::from(readiness),
             degraded_coverage: StructuredDegradedCoverage {
                 total_reasons: session_effective_degraded_reasons(session).len(),
+                journal_coverage_estimate: journal_coverage_estimate(),
+                possible_journal_blind_spots: journal_possible_blind_spots(),
             },
             degraded_reasons: session_effective_degraded_reasons(session),
             review_guidance: receipt_review_guidance(
@@ -2432,6 +2453,9 @@ fn apply_cgroup_tag_result_with_attribution_warning(
             }
         }
     }
+    for reason in result.resource_limits.degraded {
+        push_unique(&mut session.degraded_reasons, reason);
+    }
 
     db.update_session(&session).map_err(db_error)
 }
@@ -2522,10 +2546,13 @@ pub fn launch_supervised_run(
             validation_warnings.push(message.clone());
         }
     }
-    let prepared_cgroup_path = match &cgroup_plan {
+    let prepared_cgroup_result = match &cgroup_plan {
         LaunchCgroupTagPlan::Tag { root } => {
             let result = CgroupTagger::new(root)
-                .prepare_session_cgroup(&outcome.session_id)
+                .prepare_session_cgroup_with_limits(
+                    &outcome.session_id,
+                    &CgroupResourceLimits::default_agent_limits(),
+                )
                 .map_err(|error| {
                     let message = error.message;
                     let _ = fail_session(&db_path, &outcome.session_id, message.clone());
@@ -2546,6 +2573,11 @@ pub fn launch_supervised_run(
                     return err(message);
                 }
             }
+            .map(|path| CgroupTagResult {
+                cgroup_path: Some(path),
+                status: CgroupTagStatus::Tagged,
+                resource_limits: result.resource_limits,
+            })
         }
         _ => None,
     };
@@ -2614,7 +2646,9 @@ pub fn launch_supervised_run(
     configure_supervised_child_setup(
         &mut child_command,
         prepared_landlock,
-        prepared_cgroup_path.clone(),
+        prepared_cgroup_result
+            .as_ref()
+            .and_then(|result| result.cgroup_path.clone()),
         root_drop_target,
     );
     let mut child = match child_command.spawn() {
@@ -2635,15 +2669,8 @@ pub fn launch_supervised_run(
     } else {
         None
     };
-    if let Some(cgroup_path) = prepared_cgroup_path {
-        apply_pre_exec_cgroup_tag_result(
-            &db_path,
-            &outcome.session_id,
-            CgroupTagResult {
-                cgroup_path: Some(cgroup_path),
-                status: CgroupTagStatus::Tagged,
-            },
-        )?;
+    if let Some(result) = prepared_cgroup_result {
+        apply_pre_exec_cgroup_tag_result(&db_path, &outcome.session_id, result)?;
     }
     let exit_code = wait_for_child_with_file_journals(
         &db_path,
@@ -4380,6 +4407,35 @@ fn structured_cgroup_status(
     }
 }
 
+fn render_cgroup_resource_limits(path: Option<&PathBuf>) -> String {
+    let limits = cgroup_resource_limits(path);
+    if limits.is_empty() {
+        return "not recorded".to_string();
+    }
+    limits
+        .iter()
+        .map(|(name, value)| format!("{name}={value}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn cgroup_resource_limits(path: Option<&PathBuf>) -> std::collections::BTreeMap<String, String> {
+    let mut limits = std::collections::BTreeMap::new();
+    let Some(path) = path else {
+        return limits;
+    };
+    for name in ["cpu.max", "io.max", "memory.max", "pids.max"] {
+        let Ok(value) = std::fs::read_to_string(path.join(name)) else {
+            continue;
+        };
+        let value = value.trim();
+        if !value.is_empty() {
+            limits.insert(name.to_string(), value.to_string());
+        }
+    }
+    limits
+}
+
 fn landlock_status_label(status: &LandlockStatus) -> String {
     match status {
         LandlockStatus::NotRequested => "not requested".to_string(),
@@ -5586,7 +5642,20 @@ fn receipt_limitations() -> Vec<&'static str> {
         warder_journal::file_visibility_contract(),
         warder_journal::network_visibility_contract(),
         "Network policy is visibility-only in this public beta; allowed destinations are not enforced and quiet network journals are not proof of no egress.",
-        "Receipts and the local SQLite journal are accountability records with a local hash chain; they are not tamper-proof forensics against a process that can modify Warder's state.",
+        "Receipts and the local SQLite journal are accountability records with a local hash chain; they are not tamper-proof forensics against same-UID malware or any process that can modify Warder's state.",
+    ]
+}
+
+fn journal_coverage_estimate() -> &'static str {
+    "not quantifiable as a reliable percentage from local kernel signals; treat journals as useful evidence, not complete forensics"
+}
+
+fn journal_possible_blind_spots() -> Vec<&'static str> {
+    vec![
+        "kernel queue overflow, missing tracepoints, unsupported filesystems, or eBPF attach failures can drop events",
+        "descriptor, mmap, sendfile, splice, and copy_file_range observations may be synthetic and may not resolve back to a stable protected path",
+        "mount namespaces, bind mounts, containers, and direct launches outside Warder can hide or relabel activity",
+        "network journals are visibility-only and cannot prove that no egress happened",
     ]
 }
 
@@ -6687,10 +6756,62 @@ fn validate_run_state_paths(
 ) -> Result<(), CliError> {
     let db_path = db_path.map(PathBuf::from).unwrap_or_else(default_db_path);
     reject_agent_writable_state_path(config, &db_path, "database path")?;
+    validate_private_state_parent(&db_path, "database path")?;
     if let Some(path) = receipt_key {
         reject_agent_writable_state_path(config, path, "receipt key path")?;
+        validate_private_state_parent(path, "receipt key path")?;
     }
     Ok(())
+}
+
+fn validate_private_state_parent(path: &Path, label: &str) -> Result<(), CliError> {
+    let Some(parent) = path.parent() else {
+        return err(format!(
+            "{label} '{}' must live inside a private state directory",
+            path.display()
+        ));
+    };
+    match std::fs::symlink_metadata(parent) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return err(format!(
+                    "{label} parent directory '{}' must not be a symlink",
+                    parent.display()
+                ));
+            }
+            if !metadata.is_dir() {
+                return err(format!(
+                    "{label} parent '{}' must be a directory",
+                    parent.display()
+                ));
+            }
+            #[cfg(unix)]
+            {
+                let mode = metadata.permissions().mode();
+                if mode & 0o077 != 0 {
+                    return err(format!(
+                        "{label} parent directory '{}' must be private (0700 or stricter); choose a dedicated Warder state directory outside shared temp paths",
+                        parent.display()
+                    ));
+                }
+                let euid = unsafe { libc::geteuid() };
+                if euid != 0 && metadata.uid() != euid {
+                    return err(format!(
+                        "{label} parent directory '{}' must be owned by the current user or root",
+                        parent.display()
+                    ));
+                }
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(CliError {
+            message: format!(
+                "failed to inspect {label} parent directory '{}': {error}",
+                parent.display()
+            ),
+        }),
+    }
 }
 
 fn reject_agent_writable_state_path(
@@ -7164,7 +7285,10 @@ fn persist_procfs_network_journal_events(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PreparedLandlock {
-    Prepared { ruleset_fd: i32 },
+    Prepared {
+        ruleset_fd: i32,
+        rules: Vec<LandlockRule>,
+    },
     NotRequested,
     Degraded(String),
 }
@@ -7174,9 +7298,10 @@ fn prepare_landlock_for_launch(
 ) -> Result<PreparedLandlock, warder_enforcement::LandlockApplyError> {
     let mut kernel = SyscallLandlockKernel;
     match prepare_landlock_ruleset_with_kernel(plan, &mut kernel)? {
-        LandlockPrepareStatus::Prepared { ruleset_fd } => {
-            Ok(PreparedLandlock::Prepared { ruleset_fd })
-        }
+        LandlockPrepareStatus::Prepared { ruleset_fd } => Ok(PreparedLandlock::Prepared {
+            ruleset_fd,
+            rules: plan.rules.clone(),
+        }),
         LandlockPrepareStatus::NotRequested => Ok(PreparedLandlock::NotRequested),
         LandlockPrepareStatus::Degraded(message) => Ok(PreparedLandlock::Degraded(message)),
         LandlockPrepareStatus::Blocked(message) => {
@@ -7203,9 +7328,15 @@ fn configure_supervised_child_setup(
                 drop_child_privileges(target)?;
             }
             apply_supervised_seccomp_filter().map_err(|error| io::Error::other(error.message))?;
-            if let PreparedLandlock::Prepared { ruleset_fd } = prepared_landlock {
-                warder_enforcement::restrict_current_process_to_landlock_ruleset(ruleset_fd)
-                    .map_err(|error| io::Error::other(error.message))?;
+            if let PreparedLandlock::Prepared { ruleset_fd, rules } = &prepared_landlock {
+                // Ruleset FDs are prepared before spawn; paths are rechecked in
+                // the child immediately before restriction to catch symlink or
+                // overlap changes in the remaining race window.
+                warder_enforcement::restrict_current_process_to_landlock_ruleset_with_revalidation(
+                    *ruleset_fd,
+                    rules,
+                )
+                .map_err(|error| io::Error::other(error.message))?;
             }
             Ok(())
         });

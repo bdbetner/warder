@@ -4,6 +4,8 @@ use crate::{
     render_launch_readiness_text, render_session_journals_text, render_session_receipt_json_text,
     render_session_receipt_text, restore_snapshot_for_session, save_gui_config_file, LaunchRequest,
 };
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
 use warder_core::{CgroupStatus, LandlockStatus, SessionRecord, SessionStatus, SnapshotStatus};
@@ -103,8 +105,8 @@ fn render_launch_readiness_text_reports_gui_launch_decision() {
     let root =
         std::env::temp_dir().join(format!("warder-desktop-readiness-{}", std::process::id()));
     let protected = root.join("protected");
-    let config_path = root.join("gui.toml");
-    let db_path = root.join("warder.sqlite3");
+    let config_path = root.join(".warder").join("gui.toml");
+    let db_path = root.join(".warder").join("warder.sqlite3");
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&protected).expect("protected root");
 
@@ -129,6 +131,15 @@ fn render_launch_readiness_text_reports_gui_launch_decision() {
         },
     )
     .expect("config saved");
+    #[cfg(unix)]
+    assert_eq!(
+        std::fs::metadata(root.join(".warder"))
+            .expect("desktop state dir")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
 
     let readiness = render_launch_readiness_text(LaunchRequest {
         config_path,
@@ -530,8 +541,8 @@ fn session_journals_text_reads_recorded_file_activity_for_log_viewer() {
 fn launch_session_runs_supervised_command_and_returns_receipt() {
     let root = std::env::temp_dir().join(format!("warder-desktop-launch-{}", std::process::id()));
     let protected = root.join("protected");
-    let config_path = root.join("gui.toml");
-    let db_path = root.join("warder.sqlite3");
+    let config_path = root.join(".warder").join("gui.toml");
+    let db_path = root.join(".warder").join("warder.sqlite3");
     let touched_path = protected.join("hello.txt");
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&protected).expect("protected root");

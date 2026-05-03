@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use warder_config::{EnvironmentSupport, SnapshotBackend as ConfigSnapshotBackend};
@@ -952,6 +954,39 @@ fn run_state_paths_reject_agent_writable_database_and_receipt_key() {
     .unwrap_err();
     assert!(zone_error.message.contains("database path"));
     assert!(zone_error.message.contains("inside protected zone"));
+}
+
+#[cfg(unix)]
+#[test]
+fn run_state_paths_require_private_state_directory() {
+    let config = warder_config::WarderConfig::from_toml(
+        r#"
+        [enforcement]
+        writable-roots = ["/tmp/project"]
+
+        [[zones]]
+        id = "secrets"
+        name = "Secrets"
+        paths = ["/tmp/secrets"]
+        write_policy = "deny"
+
+        [[agents]]
+        id = "local"
+        label = "Local"
+        command = "sh"
+        "#,
+    )
+    .unwrap();
+    let loose_dir = temp_dir("warder-cli-loose-state-dir");
+    std::fs::create_dir_all(&loose_dir).unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(&loose_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let error = validate_run_state_paths(&config, Some(&loose_dir.join("warder.sqlite3")), None)
+        .unwrap_err();
+
+    assert!(error.message.contains("database path parent directory"));
+    assert!(error.message.contains("private"));
 }
 
 #[test]
@@ -2757,6 +2792,7 @@ fn apply_cgroup_tag_result_updates_session_as_tagged() {
         CgroupTagResult {
             cgroup_path: Some(cgroup_path.clone()),
             status: CgroupTagStatus::Tagged,
+            resource_limits: warder_enforcement::CgroupResourceLimitReport::default(),
         },
     )
     .unwrap();
@@ -2795,6 +2831,7 @@ fn apply_cgroup_tag_result_records_unsupported_as_degraded_reason() {
         CgroupTagResult {
             cgroup_path: None,
             status: CgroupTagStatus::Unsupported("cgroup root missing".to_string()),
+            resource_limits: warder_enforcement::CgroupResourceLimitReport::default(),
         },
     )
     .unwrap();
@@ -2816,6 +2853,7 @@ fn apply_cgroup_tag_result_records_unsupported_as_degraded_reason() {
         CgroupTagResult {
             cgroup_path: None,
             status: CgroupTagStatus::Unsupported("cgroup root missing".to_string()),
+            resource_limits: warder_enforcement::CgroupResourceLimitReport::default(),
         },
     )
     .unwrap();
@@ -3817,6 +3855,7 @@ fn render_session_receipt_summarizes_enforcement_state() {
     assert!(receipt.contains("status: completed"));
     assert!(receipt.contains("exit code: 0"));
     assert!(receipt.contains("cgroup: tagged"));
+    assert!(receipt.contains("cgroup resource limits:"));
     assert!(receipt.contains("landlock: degraded: Landlock unavailable"));
     assert!(receipt.contains("snapshot: not requested"));
     assert!(receipt.contains("degraded coverage: 1 reason(s)"));
@@ -3832,6 +3871,8 @@ fn render_session_receipt_summarizes_enforcement_state() {
     assert!(receipt.contains("fd writes"));
     assert!(receipt.contains("Network policy is visibility-only in this public beta"));
     assert!(receipt.contains("not tamper-proof forensics"));
+    assert!(receipt.contains("journal coverage estimate: not quantifiable"));
+    assert!(receipt.contains("possible journal blind spots:"));
 }
 
 #[test]
@@ -4082,6 +4123,7 @@ fn render_session_receipt_json_is_structured() {
         .iter()
         .any(|limitation| limitation.as_str().unwrap().contains("fd writes")));
     assert_eq!(parsed["enforcement"]["cgroup"]["status"], "tagged");
+    assert!(parsed["enforcement"]["cgroup_resource_limits"].is_object());
     assert_eq!(parsed["enforcement"]["landlock"]["status"], "degraded");
     assert_eq!(parsed["enforcement"]["snapshot"]["status"], "not_requested");
     assert_eq!(parsed["dependency_changes"]["status"], "none_detected");
@@ -4098,6 +4140,18 @@ fn render_session_receipt_json_is_structured() {
         "Landlock unavailable"
     );
     assert_eq!(parsed["degraded_coverage"]["total_reasons"], 1);
+    assert_eq!(
+        parsed["degraded_coverage"]["journal_coverage_estimate"],
+        "not quantifiable as a reliable percentage from local kernel signals; treat journals as useful evidence, not complete forensics"
+    );
+    assert!(parsed["degraded_coverage"]["possible_journal_blind_spots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|blind_spot| blind_spot
+            .as_str()
+            .unwrap()
+            .contains("kernel queue overflow")));
     assert_eq!(parsed["degraded_reasons"][0], "Landlock unavailable");
     assert_eq!(
         parsed["enforcement"]["cgroup"]["message"],
@@ -7207,6 +7261,14 @@ fn config_with_zone_root_and_cgroups(
 }
 
 fn temp_file(name: &str, extension: &str) -> PathBuf {
+    if matches!(extension, "sqlite3" | "key") {
+        let dir = std::env::temp_dir().join(format!("{name}-{}-state", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        #[cfg(unix)]
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        return dir.join(format!("warder.{extension}"));
+    }
     let path = std::env::temp_dir().join(format!("{name}-{}.{extension}", std::process::id()));
     let _ = std::fs::remove_file(&path);
     path

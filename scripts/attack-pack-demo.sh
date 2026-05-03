@@ -11,6 +11,7 @@ NETWORK_URL="${WARDER_ATTACK_PACK_URL:-http://127.0.0.1:9}"
 
 rm -rf "$DEMO_ROOT"
 mkdir -p "$WORKSPACE_ROOT" "$PROTECTED_ROOT"
+chmod 700 "$DEMO_ROOT"
 printf 'do-not-change\n' > "$PROTECTED_ROOT/secret.txt"
 
 cat > "$CONFIG_PATH" <<EOF

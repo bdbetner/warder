@@ -10,6 +10,7 @@ CONFIG_PATH="$DEMO_ROOT/local-demo.toml"
 
 rm -rf "$DEMO_ROOT"
 mkdir -p "$PROTECTED_ROOT" "$CGROUP_ROOT"
+chmod 700 "$DEMO_ROOT"
 touch "$CGROUP_ROOT/cgroup.procs"
 
 cat > "$CONFIG_PATH" <<EOF

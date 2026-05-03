@@ -63,7 +63,7 @@ To verify a receipt signature, render the same receipt format with the same key 
 warder receipt --db .warder/warder.db --session <session-id> --signing-key-file <path> --verify-signature <hex>
 ```
 
-This is local shared-secret integrity, not public-key non-repudiation. A process or user that can modify Warder's local state or read/write the signing key can still undermine receipt trust.
+This is local shared-secret integrity, not public-key non-repudiation. A same-UID process, user, or malware that can modify Warder's local state or read/write the signing key can still undermine receipt trust.
 
 ## Local Receipt Integrity Chain
 
@@ -73,4 +73,4 @@ Warder stores a local hash-chain entry whenever a session record is created or u
 warder verify-receipts --db .warder/warder.db --external-key /run/warder-key
 ```
 
-The command fails closed if any session has no integrity entry, if the chain links are inconsistent, or if the current session record no longer matches the latest logged payload hash. This is still local accountability, not tamper-proof forensics: a process with write access to Warder's state can attempt to alter both the data and the chain.
+The command fails closed if any session has no integrity entry, if the chain links are inconsistent, or if the current session record no longer matches the latest logged payload hash. This is still local accountability, not tamper-proof forensics: a same-UID process with write access to Warder's state can attempt to alter both the data and the chain.
