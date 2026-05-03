@@ -989,6 +989,115 @@ fn run_state_paths_require_private_state_directory() {
     assert!(error.message.contains("private"));
 }
 
+#[cfg(unix)]
+#[test]
+fn run_state_paths_reject_group_writable_state_ancestors() {
+    let config = warder_config::WarderConfig::from_toml(
+        r#"
+        [enforcement]
+        writable-roots = ["/tmp/project"]
+
+        [[zones]]
+        id = "secrets"
+        name = "Secrets"
+        paths = ["/tmp/secrets"]
+        write_policy = "deny"
+
+        [[agents]]
+        id = "local"
+        label = "Local"
+        command = "sh"
+        "#,
+    )
+    .unwrap();
+    let shared_dir = temp_dir("warder-cli-shared-state-ancestor");
+    let private_dir = shared_dir.join("private-state");
+    std::fs::create_dir_all(&private_dir).unwrap();
+    std::fs::set_permissions(&shared_dir, std::fs::Permissions::from_mode(0o775)).unwrap();
+    std::fs::set_permissions(&private_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+    let error = validate_run_state_paths(&config, Some(&private_dir.join("warder.sqlite3")), None)
+        .unwrap_err();
+
+    assert!(error.message.contains("database path ancestor directory"));
+    assert!(error.message.contains("group/world-writable"));
+    let _ = std::fs::set_permissions(&shared_dir, std::fs::Permissions::from_mode(0o700));
+    let _ = std::fs::remove_dir_all(shared_dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn run_state_paths_reject_writable_ancestor_when_state_parent_is_missing() {
+    let config = warder_config::WarderConfig::from_toml(
+        r#"
+        [enforcement]
+        writable-roots = ["/tmp/project"]
+
+        [[zones]]
+        id = "secrets"
+        name = "Secrets"
+        paths = ["/tmp/secrets"]
+        write_policy = "deny"
+
+        [[agents]]
+        id = "local"
+        label = "Local"
+        command = "sh"
+        "#,
+    )
+    .unwrap();
+    let shared_dir = temp_dir("warder-cli-missing-state-ancestor");
+    let missing_private_dir = shared_dir.join("missing-private-state");
+    std::fs::create_dir_all(&shared_dir).unwrap();
+    std::fs::set_permissions(&shared_dir, std::fs::Permissions::from_mode(0o775)).unwrap();
+
+    let error = validate_run_state_paths(
+        &config,
+        Some(&missing_private_dir.join("warder.sqlite3")),
+        None,
+    )
+    .unwrap_err();
+
+    assert!(error.message.contains("database path ancestor directory"));
+    assert!(error.message.contains("group/world-writable"));
+    let _ = std::fs::set_permissions(&shared_dir, std::fs::Permissions::from_mode(0o700));
+    let _ = std::fs::remove_dir_all(shared_dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn run_state_paths_allow_sticky_shared_temp_ancestors() {
+    let config = warder_config::WarderConfig::from_toml(
+        r#"
+        [enforcement]
+        writable-roots = ["/tmp/project"]
+
+        [[zones]]
+        id = "secrets"
+        name = "Secrets"
+        paths = ["/tmp/secrets"]
+        write_policy = "deny"
+
+        [[agents]]
+        id = "local"
+        label = "Local"
+        command = "sh"
+        "#,
+    )
+    .unwrap();
+    let sticky_dir = temp_dir("warder-cli-sticky-state-ancestor");
+    let private_dir = sticky_dir.join("private-state");
+    std::fs::create_dir_all(&private_dir).unwrap();
+    std::fs::set_permissions(&sticky_dir, std::fs::Permissions::from_mode(0o1777)).unwrap();
+    std::fs::set_permissions(&private_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+    validate_run_state_paths(&config, Some(&private_dir.join("warder.sqlite3")), None)
+        .expect("sticky shared ancestor with private state child should be allowed");
+
+    let _ = std::fs::set_permissions(&sticky_dir, std::fs::Permissions::from_mode(0o700));
+    let _ = std::fs::remove_dir_all(sticky_dir);
+}
+
 #[test]
 fn root_launch_policy_requires_explicit_drop_target() {
     let no_ack =
@@ -1014,6 +1123,31 @@ fn root_launch_policy_requires_explicit_drop_target() {
     assert_eq!(
         root_drop_target_from_env(1000, false, None, None).unwrap(),
         None
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn child_privilege_hardening_sets_no_new_privs_and_non_dumpable() {
+    let pid = unsafe { libc::fork() };
+    assert!(pid >= 0, "fork failed");
+    if pid == 0 {
+        let hardening_result = harden_child_privilege_state_before_drop()
+            .and_then(|_| harden_child_privilege_state_after_drop());
+        let no_new_privs = unsafe { libc::prctl(libc::PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) };
+        let dumpable = unsafe { libc::prctl(libc::PR_GET_DUMPABLE, 0, 0, 0, 0) };
+        let ok = hardening_result.is_ok() && no_new_privs == 1 && dumpable == 0;
+        unsafe { libc::_exit(if ok { 0 } else { 1 }) };
+    }
+
+    let mut status = 0;
+    let waited = unsafe { libc::waitpid(pid, &mut status, 0) };
+    assert_eq!(waited, pid, "waitpid failed");
+    assert!(libc::WIFEXITED(status), "child did not exit cleanly");
+    assert_eq!(
+        libc::WEXITSTATUS(status),
+        0,
+        "child hardening did not leave no_new_privs=1 and dumpable=0"
     );
 }
 

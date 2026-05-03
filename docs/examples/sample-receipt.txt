@@ -20,7 +20,7 @@ receipt limitations:
 - limited to inotify protected-path changes plus live eBPF observations of common path syscalls, fd writes, ftruncate(2), writable mmap(2)/mprotect(2), sendfile(2), splice(2), and copy_file_range(2) when attached; fd and mmap observations may not resolve back to protected paths and remain visibility-only, not enforcement
 - limited to observed TCP connect(2), UDP sendto(2)/sendmsg(2)/sendmmsg(2), socket send(2), and socket-like sendfile(2)/splice(2) fd activity when live eBPF network journaling is attached, plus connected socket snapshots from procfs during supervised runs; not complete socket forensics or enforcement
 - Network policy is visibility-only in this public beta; allowed destinations are not enforced and quiet network journals are not proof of no egress.
-- Receipts and the local SQLite journal are accountability records with a local hash chain; they are not tamper-proof forensics against same-UID malware or any process that can modify Warder's state.
+- Receipts and the local SQLite journal are accountability records with a local hash chain. Even with private 0700 state-directory checks, they are not tamper-proof forensics against same-UID malware or any process that can modify Warder's state.
 dependency changes: none_detected (command metadata does not reference known package managers or dependency files)
 dependency file changes: none
 file activity: 3 event(s)

@@ -31,6 +31,15 @@ The easiest review path is a `.deb` on an Ubuntu/Debian-family desktop or an RPM
 | Btrfs snapshot and revert | Protected root on Btrfs plus configured snapshot root | Snapshot-required sessions fail closed; optional snapshots are reported as unavailable. |
 | Desktop app | Linux desktop with GTK 3 and WebKitGTK 4.1 runtime libraries | Use the CLI if the desktop runtime is unavailable. |
 
+## eBPF Build Tooling
+
+The eBPF object build scripts require a system Clang with BPF target support. The scripts prefer `/usr/bin/clang` and intentionally reject Swift toolchain Clang wrappers because those wrappers have failed BPF builds on some developer workstations. If your system Clang is installed somewhere else, run the scripts with an explicit working compiler:
+
+```bash
+CLANG=/usr/bin/clang scripts/build-ebpf-file-journal.sh
+CLANG=/usr/bin/clang scripts/build-ebpf-network-journal.sh
+```
+
 ## Kernel Guidance
 
 Warder should be usable as a supervised launcher on mainstream modern Linux systems, but stronger protection depends on kernel and distro configuration.

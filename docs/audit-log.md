@@ -63,7 +63,7 @@ To verify a receipt signature, render the same receipt format with the same key 
 warder receipt --db .warder/warder.db --session <session-id> --signing-key-file <path> --verify-signature <hex>
 ```
 
-This is local shared-secret integrity, not public-key non-repudiation. A same-UID process, user, or malware that can modify Warder's local state or read/write the signing key can still undermine receipt trust.
+This is local shared-secret integrity, not public-key non-repudiation. A same-UID process, user, or malware that can modify Warder's local state or read/write the signing key can still undermine receipt trust, even when Warder enforces private state-directory placement.
 
 ## Local Receipt Integrity Chain
 

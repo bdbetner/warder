@@ -5642,7 +5642,7 @@ fn receipt_limitations() -> Vec<&'static str> {
         warder_journal::file_visibility_contract(),
         warder_journal::network_visibility_contract(),
         "Network policy is visibility-only in this public beta; allowed destinations are not enforced and quiet network journals are not proof of no egress.",
-        "Receipts and the local SQLite journal are accountability records with a local hash chain; they are not tamper-proof forensics against same-UID malware or any process that can modify Warder's state.",
+        "Receipts and the local SQLite journal are accountability records with a local hash chain. Even with private 0700 state-directory checks, they are not tamper-proof forensics against same-UID malware or any process that can modify Warder's state.",
     ]
 }
 
@@ -6801,10 +6801,15 @@ fn validate_private_state_parent(path: &Path, label: &str) -> Result<(), CliErro
                         parent.display()
                     ));
                 }
+                validate_private_state_ancestors(parent, label)?;
             }
             Ok(())
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            #[cfg(unix)]
+            validate_private_state_ancestors(parent, label)?;
+            Ok(())
+        }
         Err(error) => Err(CliError {
             message: format!(
                 "failed to inspect {label} parent directory '{}': {error}",
@@ -6812,6 +6817,46 @@ fn validate_private_state_parent(path: &Path, label: &str) -> Result<(), CliErro
             ),
         }),
     }
+}
+
+#[cfg(unix)]
+fn validate_private_state_ancestors(parent: &Path, label: &str) -> Result<(), CliError> {
+    for ancestor in parent.ancestors().skip(1) {
+        let metadata = match std::fs::symlink_metadata(ancestor) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(CliError {
+                    message: format!(
+                        "failed to inspect {label} ancestor directory '{}': {error}",
+                        ancestor.display()
+                    ),
+                });
+            }
+        };
+        if metadata.file_type().is_symlink() {
+            return err(format!(
+                "{label} ancestor directory '{}' must not be a symlink",
+                ancestor.display()
+            ));
+        }
+        if !metadata.is_dir() {
+            return err(format!(
+                "{label} ancestor '{}' must be a directory",
+                ancestor.display()
+            ));
+        }
+        let mode = metadata.permissions().mode();
+        let writable_by_group_or_other = mode & 0o022 != 0;
+        let sticky = mode & 0o1000 != 0;
+        if writable_by_group_or_other && !sticky {
+            return err(format!(
+                "{label} ancestor directory '{}' must not be group/world-writable unless it has the sticky bit",
+                ancestor.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn reject_agent_writable_state_path(

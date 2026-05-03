@@ -109,6 +109,9 @@ fn render_launch_readiness_text_reports_gui_launch_decision() {
     let db_path = root.join(".warder").join("warder.sqlite3");
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&protected).expect("protected root");
+    #[cfg(unix)]
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
+        .expect("private launch root");
 
     save_gui_config_file(
         config_path.clone(),
@@ -220,6 +223,55 @@ fn desktop_capability_file_keeps_plugin_permissions_narrow() {
         assert!(
             !capability.contains(forbidden),
             "desktop capability should not include broad plugin permission {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn desktop_invoke_handler_uses_explicit_command_allowlist() {
+    let source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs");
+    let source = std::fs::read_to_string(source_path).expect("desktop lib source");
+    let expected = [
+        "app_ready",
+        "load_recommended_protections",
+        "load_profile_template_catalog",
+        "save_gui_config",
+        "dry_run_text",
+        "session_receipt_text",
+        "session_receipt_json",
+        "session_journals_text",
+        "snapshot_revert_preview",
+        "snapshot_revert_session",
+        "recent_sessions",
+        "host_readiness_summary",
+        "desktop_default_paths",
+        "build_launch_command",
+        "launch_readiness_text",
+        "launch_session_command",
+    ];
+    let command_count = source.matches("#[tauri::command]").count();
+    assert_eq!(
+        command_count,
+        expected.len(),
+        "new Tauri commands must be reviewed and added to the explicit invoke allowlist test"
+    );
+    let handler_start = source
+        .find(".invoke_handler(tauri::generate_handler![")
+        .expect("generate_handler allowlist");
+    let handler = &source[handler_start..];
+    let handler_end = handler.find("])").expect("generate_handler close");
+    let handler = &handler[..handler_end];
+
+    for command in expected {
+        assert!(
+            handler.contains(command),
+            "invoke handler must explicitly allow {command}"
+        );
+    }
+    for forbidden in ["shell", "open", "read_file", "write_file", "remove_file"] {
+        assert!(
+            !handler.contains(forbidden),
+            "desktop invoke allowlist must not include broad filesystem or shell command {forbidden}"
         );
     }
 }
@@ -546,6 +598,9 @@ fn launch_session_runs_supervised_command_and_returns_receipt() {
     let touched_path = protected.join("hello.txt");
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&protected).expect("protected root");
+    #[cfg(unix)]
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
+        .expect("private launch root");
 
     save_gui_config_file(
         config_path.clone(),

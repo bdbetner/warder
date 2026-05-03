@@ -18,7 +18,7 @@ The first engineering passes focused on defects that were concrete, local, and t
 - Supervised child setup installs a small seccomp filter for namespace and mount escape syscalls.
 - Experimental read denial is available through `read_deny = true` or `read_policy = "deny"` with explicit disjoint readable roots.
 - Landlock rule paths are revalidated immediately before `landlock_restrict_self` in the supervised child setup path.
-- Launch state paths must be outside protected/writable policy surfaces and, on Unix, inside private parent directories.
+- Launch state paths must be outside protected/writable policy surfaces and, on Unix, inside private parent directories without unsafe writable ancestors.
 - Warder attempts best-effort cgroup resource limits for launched sessions and records applied limits or degraded failures.
 - Receipts include a non-numeric journal coverage estimate and concrete blind-spot list instead of implying complete forensic coverage.
 - Config validation rejects shared scratch roots such as `/tmp` and warns on common cache/build scratch paths.
@@ -41,7 +41,7 @@ The final production-hardening pass resolved the concrete items that were previo
 - Snapshot restore path construction must continue to reject unsafe snapshot ids before path joins.
 - DB migrations should keep using fixed allowlisted identifiers.
 - Local DB/state storage should keep restrictive permissions and concurrency settings.
-- Local DB/state storage is still not tamper-proof against unrelated same-UID malware, even with private directory checks.
+- Local DB/state storage is still not tamper-proof against unrelated same-UID malware, even with private directory and ancestor checks.
 - Session ids are random local receipt identifiers, not authentication tokens.
 - Cgroup tagging for `warder run --launch` is prepared before spawn and applied in the child setup path before exec. Commands launched directly outside Warder are still completely unsupervised.
 - Network destination allowlists are parsed but not enforced.
