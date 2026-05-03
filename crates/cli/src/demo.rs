@@ -88,6 +88,7 @@ pub fn run_attack_pack_demo(
         require_enforcement: false,
         receipt_key: None,
         accept_degraded: true,
+        allow_root: false,
         agent: "attack-pack-shell".to_string(),
         command: vec![
             "sh".to_string(),

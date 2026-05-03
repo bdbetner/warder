@@ -14,6 +14,8 @@ warder run --config warder.toml --launch --require-enforcement --receipt-key /ru
 
 The key must pass Warder's private key-file checks. On Unix that means the file must not be readable or writable by group or other users. Place strict-mode keys outside the protected workspace and outside the default `~/.warder` state directory when possible.
 
+Warder also rejects a strict-mode receipt key path when it is inside a configured protected zone or an `enforcement.writable_roots` entry. The same placement rule applies to the SQLite database path used for session state. This prevents the most direct self-tampering configuration, but the local database and HMAC key are still not forensic evidence against unrelated same-user malware.
+
 Best-effort launches may still omit the key, but their receipts will remain locally signed or unsigned depending on the command used to render them.
 
 ## Verification

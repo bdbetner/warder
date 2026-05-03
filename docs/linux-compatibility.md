@@ -58,6 +58,8 @@ warder dry-run --config warder.toml --agent <agent-id> -- <agent command>
 
 Use `--require-enforcement --receipt-key <path>` for strict sessions. Use `--accept-degraded` only when you have read the degraded reasons and are comfortable with the reduced coverage.
 
+Avoid running agents through `sudo`. If a privileged launcher is needed for host setup, `warder run --launch` requires `--allow-root` and a sudo environment with `SUDO_UID`/`SUDO_GID`; the child clears supplementary groups, drops its capability bounding set, and is dropped back to that non-root user before exec. Direct root launches are refused.
+
 ## Current Beta Limits
 
 - Release packages are checksummed and attested where available, but they are not package-manager signed.

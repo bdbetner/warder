@@ -343,6 +343,7 @@ fn launch_request_to_cli_command(request: LaunchRequest) -> CliCommand {
         require_enforcement: request.require_enforcement,
         receipt_key: request.receipt_key_path,
         accept_degraded: request.accept_degraded,
+        allow_root: false,
         agent: request.agent_id,
         command: request.command,
     }

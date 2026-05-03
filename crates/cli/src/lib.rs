@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 #[cfg(test)]
 use std::process::ExitStatus;
 use std::process::{Child, Command, Stdio};
@@ -104,6 +104,7 @@ pub enum CliCommand {
         require_enforcement: bool,
         receipt_key: Option<PathBuf>,
         accept_degraded: bool,
+        allow_root: bool,
         agent: String,
         command: Vec<String>,
     },
@@ -227,6 +228,12 @@ pub struct LaunchOutcome {
     pub session_id: String,
     pub exit_code: Option<i32>,
     pub validation_warnings: Vec<String>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct RootDropTarget {
+    uid: u32,
+    gid: u32,
 }
 
 type ReceiptHmac = Hmac<Sha256>;
@@ -2200,8 +2207,8 @@ impl DaemonTerminator for CommandDaemonTerminator {
 
 pub fn usage() -> &'static str {
     "usage: warder <command>\n\
-primary: warder run --config <path> --launch --agent <id> [--require-enforcement --receipt-key <path>] [--accept-degraded] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
-agent shortcut: warder codex|claude|openclaw [--config <path>] [--accept-degraded] [--require-enforcement --receipt-key <path>] -- [agent args]\n\
+primary: warder run --config <path> --launch --agent <id> [--require-enforcement --receipt-key <path>] [--accept-degraded] [--allow-root] [--cgroup-root <path>] [--snapshot-root <path>] -- <agent command>\n\
+agent shortcut: warder codex|claude|openclaw [--config <path>] [--accept-degraded] [--allow-root] [--require-enforcement --receipt-key <path>] -- [agent args]\n\
 record only: warder run --config <path> --agent <id> -- <agent command>\n\
 preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
 readiness: warder doctor [--config <path>]\n\
@@ -2231,6 +2238,7 @@ pub fn create_run_session(
         require_enforcement: _,
         receipt_key: _,
         accept_degraded: _,
+        allow_root: _,
         agent,
         command,
     } = command
@@ -2441,6 +2449,7 @@ pub fn launch_supervised_run(
         require_enforcement,
         receipt_key,
         accept_degraded,
+        allow_root,
         command: child_command,
         ..
     } = command
@@ -2457,6 +2466,7 @@ pub fn launch_supervised_run(
         message: "run requires --config before a command can be launched".to_string(),
     })?;
     let config = load_config(config_path)?;
+    let root_drop_target = root_drop_target_for_current_process(*allow_root)?;
     let cgroup_plan = planned_launch_cgroup_tagging(&config, cgroup_root.as_ref());
     if let LaunchCgroupTagPlan::Blocked(message) = &cgroup_plan {
         return err(message.clone());
@@ -2473,6 +2483,7 @@ pub fn launch_supervised_run(
     enforce_strict_write_lockout(*require_enforcement, &config, &landlock_plan)?;
     enforce_strict_receipt_key(*require_enforcement, receipt_key.as_deref())?;
     enforce_degraded_launch_acceptance(*accept_degraded, &launch_readiness)?;
+    validate_run_state_paths(&config, db.as_deref(), receipt_key.as_deref())?;
     let landlock_status = landlock_plan.status.clone();
     if let LandlockPlanStatus::Blocked(message) = landlock_status {
         return err(message);
@@ -2604,6 +2615,7 @@ pub fn launch_supervised_run(
         &mut child_command,
         prepared_landlock,
         prepared_cgroup_path.clone(),
+        root_drop_target,
     );
     let mut child = match child_command.spawn() {
         Ok(child) => child,
@@ -2700,6 +2712,7 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
     let mut require_enforcement = false;
     let mut receipt_key = None;
     let mut accept_degraded = false;
+    let mut allow_root = false;
     let mut agent = None;
     let mut index = 0;
     while index < options.len() {
@@ -2740,6 +2753,10 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
                 accept_degraded = true;
                 index += 1;
             }
+            "--allow-root" => {
+                allow_root = true;
+                index += 1;
+            }
             "--agent" => {
                 agent = Some(value_after(options, index, "--agent")?);
                 index += 2;
@@ -2761,6 +2778,7 @@ fn parse_run(args: Vec<String>) -> Result<CliCommand, CliError> {
         require_enforcement,
         receipt_key,
         accept_degraded,
+        allow_root,
         agent,
         command,
     })
@@ -3084,6 +3102,7 @@ fn parse_agent_shortcut(agent: SetupAgent, args: Vec<String>) -> Result<CliComma
     let mut require_enforcement = false;
     let mut receipt_key = None;
     let mut accept_degraded = false;
+    let mut allow_root = false;
     let mut index = 0;
     while index < options.len() {
         match options[index].as_str() {
@@ -3119,6 +3138,10 @@ fn parse_agent_shortcut(agent: SetupAgent, args: Vec<String>) -> Result<CliComma
                 accept_degraded = true;
                 index += 1;
             }
+            "--allow-root" => {
+                allow_root = true;
+                index += 1;
+            }
             unknown => {
                 return err(format!(
                     "unknown {} shortcut option '{unknown}'; put agent arguments after '--'",
@@ -3138,6 +3161,7 @@ fn parse_agent_shortcut(agent: SetupAgent, args: Vec<String>) -> Result<CliComma
         require_enforcement,
         receipt_key,
         accept_degraded,
+        allow_root,
         agent: setup_agent_profile_id(agent).to_string(),
         command,
     })
@@ -6656,6 +6680,130 @@ fn validate_strict_receipt_key(
     read_receipt_signing_key(path).map(|_| ())
 }
 
+fn validate_run_state_paths(
+    config: &WarderConfig,
+    db_path: Option<&Path>,
+    receipt_key: Option<&Path>,
+) -> Result<(), CliError> {
+    let db_path = db_path.map(PathBuf::from).unwrap_or_else(default_db_path);
+    reject_agent_writable_state_path(config, &db_path, "database path")?;
+    if let Some(path) = receipt_key {
+        reject_agent_writable_state_path(config, path, "receipt key path")?;
+    }
+    Ok(())
+}
+
+fn reject_agent_writable_state_path(
+    config: &WarderConfig,
+    state_path: &Path,
+    label: &str,
+) -> Result<(), CliError> {
+    for zone in &config.zones {
+        for zone_path in &zone.paths {
+            if path_is_at_or_below(state_path, zone_path) {
+                return err(format!(
+                    "{label} '{}' is inside protected zone '{}'; move Warder state and receipt keys outside configured zones",
+                    state_path.display(),
+                    zone_path.display()
+                ));
+            }
+        }
+    }
+    for writable_root in &config.enforcement.writable_roots {
+        if path_is_at_or_below(state_path, writable_root) {
+            return err(format!(
+                "{label} '{}' is inside agent writable root '{}'; move Warder state and receipt keys outside writable roots",
+                state_path.display(),
+                writable_root.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn path_is_at_or_below(path: &Path, root: &Path) -> bool {
+    let path = normalized_existing_or_lexical(path);
+    let root = normalized_existing_or_lexical(root);
+    path == root || path.starts_with(root)
+}
+
+fn normalized_existing_or_lexical(path: &Path) -> PathBuf {
+    path.canonicalize()
+        .unwrap_or_else(|_| lexical_normalize(path))
+}
+
+fn lexical_normalize(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir | Component::Normal(_) => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+}
+
+fn root_drop_target_for_current_process(
+    allow_root: bool,
+) -> Result<Option<RootDropTarget>, CliError> {
+    root_drop_target_from_env(
+        effective_uid(),
+        allow_root,
+        std::env::var_os("SUDO_UID").and_then(|value| value.into_string().ok()),
+        std::env::var_os("SUDO_GID").and_then(|value| value.into_string().ok()),
+    )
+}
+
+fn root_drop_target_from_env(
+    effective_uid: u32,
+    allow_root: bool,
+    sudo_uid: Option<String>,
+    sudo_gid: Option<String>,
+) -> Result<Option<RootDropTarget>, CliError> {
+    if effective_uid != 0 {
+        return Ok(None);
+    }
+    if !allow_root {
+        return err(
+            "refusing to launch an agent as root; rerun without sudo or pass --allow-root to drop back to the sudo user before exec",
+        );
+    }
+    let uid = parse_non_root_id(sudo_uid.as_deref(), "SUDO_UID")?;
+    let gid = parse_non_root_id(sudo_gid.as_deref(), "SUDO_GID")?;
+    Ok(Some(RootDropTarget { uid, gid }))
+}
+
+fn parse_non_root_id(value: Option<&str>, label: &str) -> Result<u32, CliError> {
+    let Some(value) = value else {
+        return err(format!(
+            "--allow-root requires {label} so Warder can drop privileges before exec"
+        ));
+    };
+    let id = value.parse::<u32>().map_err(|error| CliError {
+        message: format!("invalid {label} value '{value}': {error}"),
+    })?;
+    if id == 0 {
+        return err(format!(
+            "--allow-root refuses {label}=0; supervised agents must drop to a non-root user"
+        ));
+    }
+    Ok(id)
+}
+
+#[cfg(unix)]
+fn effective_uid() -> u32 {
+    unsafe { libc::geteuid() }
+}
+
+#[cfg(not(unix))]
+fn effective_uid() -> u32 {
+    1
+}
+
 fn landlock_status_from_plan(status: &LandlockPlanStatus) -> LandlockStatus {
     match status {
         LandlockPlanStatus::Apply => LandlockStatus::Pending,
@@ -7042,6 +7190,7 @@ fn configure_supervised_child_setup(
     command: &mut Command,
     prepared_landlock: PreparedLandlock,
     cgroup_path: Option<PathBuf>,
+    root_drop_target: Option<RootDropTarget>,
 ) {
     use std::os::unix::process::CommandExt;
 
@@ -7049,6 +7198,9 @@ fn configure_supervised_child_setup(
         command.pre_exec(move || {
             if let Some(path) = cgroup_path.as_deref() {
                 tag_current_process_into_cgroup(path)?;
+            }
+            if let Some(target) = root_drop_target {
+                drop_child_privileges(target)?;
             }
             apply_supervised_seccomp_filter().map_err(|error| io::Error::other(error.message))?;
             if let PreparedLandlock::Prepared { ruleset_fd } = prepared_landlock {
@@ -7065,7 +7217,50 @@ fn configure_supervised_child_setup(
     _command: &mut Command,
     _prepared_landlock: PreparedLandlock,
     _cgroup_path: Option<PathBuf>,
+    _root_drop_target: Option<RootDropTarget>,
 ) {
+}
+
+#[cfg(target_os = "linux")]
+fn drop_child_privileges(target: RootDropTarget) -> io::Result<()> {
+    clear_child_supplementary_groups()?;
+    drop_child_capability_bounding_set()?;
+    let gid_result = unsafe { libc::setgid(target.gid) };
+    if gid_result != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let uid_result = unsafe { libc::setuid(target.uid) };
+    if uid_result != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn clear_child_supplementary_groups() -> io::Result<()> {
+    let result = unsafe { libc::setgroups(0, std::ptr::null()) };
+    if result != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn drop_child_capability_bounding_set() -> io::Result<()> {
+    const LINUX_CAPABILITY_SCAN_LIMIT: libc::c_ulong = 64;
+
+    for capability in 0..=LINUX_CAPABILITY_SCAN_LIMIT {
+        let result = unsafe { libc::prctl(libc::PR_CAPBSET_DROP, capability, 0, 0, 0) };
+        if result == 0 {
+            continue;
+        }
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::EINVAL) {
+            break;
+        }
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn landlock_apply_supported() -> bool {

@@ -41,6 +41,10 @@ Landlock is the preferred mechanism for preventing writes to protected paths. Pa
 
 Best-effort launches may continue with degraded protection only after the caller passes `warder run --accept-degraded`. Without that acknowledgement, Warder refuses to spawn the command when pre-launch checks find degraded coverage. Strict launches with `warder run --require-enforcement` refuse to start when any required protected write blocking is not active or when `--receipt-key <path>` is missing/unreadable.
 
+Warder refuses launches when the SQLite database path or strict-mode receipt key path is below a configured zone path or agent writable root. Agent writable roots are the paths Landlock allows the child to write, and zone paths are the session's sensitive policy surface, so placing Warder state there would let a successful supervised session tamper with or entangle its own local accountability records. This check is a placement guard, not tamper-proof forensics; unrelated same-user processes remain outside Warder's control.
+
+Warder also refuses to launch an agent as root unless `--allow-root` is passed. On sudo-based launches, `--allow-root` requires `SUDO_UID` and `SUDO_GID`; the child is moved into the prepared cgroup, clears supplementary groups, drops its capability bounding set, and then drops to that non-root user before seccomp and Landlock are applied. Direct root launches without a non-root drop target are refused.
+
 Snapshot ids are validated before restore path construction. Restore planning must continue to reject path separators, traversal, absolute paths, and empty ids before joining anything below a snapshot root.
 
 ## Observation

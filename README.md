@@ -143,6 +143,8 @@ warder run --config warder.toml --launch --accept-degraded --agent local-script 
 
 `--accept-degraded` is required when the launch readiness check finds incomplete protection, such as missing delegated cgroups, unavailable snapshots, or visibility-only eBPF journaling. Omit it when you want Warder to refuse degraded launches.
 
+Keep Warder's database and receipt key outside protected zones and outside paths an agent can write. Warder refuses launches when `--db` or a strict-mode `--receipt-key` sits under a configured zone path or `enforcement.writable_roots` entry. Warder also refuses root-launched agents unless `--allow-root` is passed from a sudo environment that lets Warder drop the child back to the original non-root user.
+
 Review the result:
 
 ```bash

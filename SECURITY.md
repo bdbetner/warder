@@ -34,6 +34,10 @@ Local receipts and journals are accountability records, not tamper-proof forensi
 
 Receipt signing can add local HMAC integrity checks for exported receipts when the signing key is kept outside the supervised session's write access. It does not make Warder state tamper-proof, and it is not a public-key non-repudiation mechanism. Until stronger state-file controls and external key management are implemented, do not use Warder receipts as forensic evidence against a process that could also modify Warder's local state directory or receipt signing key.
 
+Warder refuses launches when the configured SQLite database path or strict-mode receipt key path is inside a configured protected zone or agent writable root. Keep Warder state in the default XDG state directory or another directory outside every zone path and every `enforcement.writable_roots` entry. This reduces straightforward self-tampering by Warder-launched agents, but it does not make local state tamper-proof against unrelated same-user processes or malware.
+
+Do not run supervised agents as root. If Warder itself is started through `sudo`, `warder run --launch` refuses by default. Passing `--allow-root` is an explicit acknowledgement for sudo-based cgroup setup; Warder then requires `SUDO_UID` and `SUDO_GID`, clears supplementary groups, drops the child capability bounding set, and drops the child back to that non-root user before installing seccomp and Landlock. Direct root shells without a non-root sudo target are refused.
+
 ## Before Relying On Warder
 
 Check these items for the specific machine and session:
@@ -47,6 +51,8 @@ Check these items for the specific machine and session:
 - Does the journal show file activity in readable form?
 - Does network journal output explain its coverage limits?
 - Are receipt signing keys stored outside any path the supervised command can write?
+- Is Warder's SQLite database outside every configured zone path and writable root?
+- Is the session being launched without root privileges, or with `--allow-root` only when sudo provides a non-root drop target?
 - Are common secret paths denied or warned about by default?
 
 ## Reporting Security Issues
