@@ -6,6 +6,7 @@
 /.lattice/
 /.warder/
 /.superpowers/
+/.codex
 *.db
 *.sqlite
 *.sqlite3
