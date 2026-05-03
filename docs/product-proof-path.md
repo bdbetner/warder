@@ -41,6 +41,8 @@ It is not a general endpoint security product, a cloud AI governance tool, a mod
    - Keep GitHub artifact attestations, checksums, and manifest validation.
    - Add stronger artifact signing only after key custody, rotation, revocation, and user verification docs exist.
 
+P0 status: implemented except for stronger artifact signing, which remains intentionally gated on key custody and user verification design.
+
 ## P1: Strengthen The Security Story
 
 - Add privileged integration tests for Landlock write denial, experimental read denial, symlink cases, seccomp inheritance, pre-exec cgroup attribution, Btrfs restore, and degraded eBPF receipts.

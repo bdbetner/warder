@@ -27,20 +27,22 @@ These review-driven items are implemented and should remain protected by tests:
 
 Remaining hardening should focus on global always-on supervision design, broader live-journal compatibility evidence on privileged hosts, public-key receipt transparency, and capability-bounded execution beyond the current seccomp filter.
 
-## Next Product Proof Path
+## Product Proof Path
 
-These are the next execution items before broader platform work:
+The first Linux proof path is implemented and should remain protected by tests and smoke scripts:
 
-1. Add an attack-pack demo that shows a protected write blocked where Landlock is available, read protection status called out explicitly, network activity observed but not blocked, workspace edits allowed, and receipt/recovery state printed at the end.
-2. Add `warder test-host` or `warder verify-host` to run actual local probes and label each control as `proven working`, `configured/planned`, `degraded`, or `unsupported`.
-3. Add profile-first setup commands for Codex CLI, Claude Code, and OpenClaw. Keep local scripts as the generic fallback. Goose is intentionally out of the near-term setup surface until there is specific reviewer demand.
-4. Publish a protection matrix covering common Linux hosts, filesystems, containerized runs, and OpenClaw-specific degraded states.
-5. Keep release trust moving toward stronger artifact signing only when key custody and user verification docs are clear.
-6. Split the monolithic CLI implementation into focused modules before adding more command surface.
+- `warder demo attack-pack` shows a protected write attempt, protected read status, workspace edit, network attempt, receipt, and journal output from an installed CLI.
+- `warder test-host` and `warder verify-host` run local probes and label each control as `proven working`, `configured/planned`, `degraded`, or `unsupported`.
+- `warder setup codex|claude|openclaw --workspace <path> --protect-secrets` generates first-run policies from known agent presets. Goose remains out of the near-term setup surface until there is specific reviewer demand.
+- `warder codex|claude|openclaw -- [agent args]` provides short launch aliases over the existing supervised `run --launch` path.
+- [Protection Matrix](docs/protection-matrix.md) covers common Linux hosts, filesystems, containerized runs, and OpenClaw-specific degraded states.
+
+Remaining product-proof work should focus on reviewer feedback from these flows, clearer remediation guidance, and stronger release artifact signing only after key custody and user verification docs are clear.
 
 ## Next Product Improvements
 
 - Improve reviewer onboarding from real feedback on the public beta package and demo flow.
+- Split the monolithic CLI implementation into focused modules before adding more command surface.
 - Add guided host-readiness remediation from `warder doctor` output.
 - Improve snapshot and guarded-revert UX on hosts without Btrfs support.
 - Expand command examples for more local agent tools as reviewers request them.
