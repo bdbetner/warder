@@ -130,6 +130,12 @@ fn main() {
                 }
             }
         },
+        Ok(warder_cli::CliCommand::Tui { config, db }) => {
+            match warder_cli::run_tui(warder_cli::TuiOptions { config, db }) {
+                Ok(()) => {}
+                Err(error) => exit_with_error(error),
+            }
+        }
         Ok(warder_cli::CliCommand::Explain { config }) => {
             match warder_cli::render_policy_explain_from_config(
                 Some(config),

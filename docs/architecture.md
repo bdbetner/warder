@@ -1,10 +1,10 @@
 # Architecture
 
-Warder is a Linux-first CLI and desktop app with small Rust crates for policy, state, enforcement, snapshots, and journaling. The basic supervised-session path does not require a background daemon.
+Warder is a Linux-first CLI, terminal TUI, and desktop app with small Rust crates for policy, state, enforcement, snapshots, and journaling. The basic supervised-session path does not require a background daemon.
 
 ## Components
 
-- `crates/cli`: command-line app.
+- `crates/cli`: command-line app and `warder tui` terminal dashboard.
 - `apps/desktop`: native Linux desktop app.
 - `crates/config`: config loading and validation.
 - `crates/core`: shared domain types.

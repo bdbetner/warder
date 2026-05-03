@@ -22,6 +22,7 @@ The first goal is practical: keep permissive local agent workflows fast while ma
 - Reviewing Warder: read [Reviewer Feedback Guide](docs/reviewer-feedback.md).
 - Evaluating the safety model: read [Security Model](docs/security-model.md) and [Threat Model](THREAT_MODEL.md).
 - Checking host coverage: run `warder test-host`, then read [Protection Matrix](docs/protection-matrix.md).
+- Prefer an interactive terminal flow: run `warder tui`.
 - Running OpenClaw: read [OpenClaw Support](docs/openclaw-support.md).
 - Looking for the project direction: read [Product Overview](PRODUCT_SPEC.md), [Vision](docs/vision.md), and [Roadmap](ROADMAP.md).
 - Looking for common scenarios: read [Examples](docs/examples/README.md) and [FAQ](docs/FAQ.md).
@@ -36,7 +37,7 @@ It gives you real host-side guardrails without forcing every workflow into a con
 - **Protected zones and Btrfs snapshots**: Declare sensitive directories, block protected writes with Landlock where available, snapshot supported Btrfs roots before risky sessions, and revert from recorded snapshots when needed.
 - **Readable journals**: Warder records protected-zone file activity with inotify and can add optional eBPF/procfs network and file-observation data where built, permitted, and supported by the kernel.
 - **Tamper-evident receipts**: Session receipts record the command, policy, active protections, degraded protections, journal coverage, snapshot state, and local hash-chain integrity. Strict launches require an external receipt key and can be checked with `warder verify-receipts`.
-- **Desktop-first review path**: The Tauri desktop app provides setup, launch-readiness review, doctor output, receipt review, and a persistent reminder that Warder supervises only Warder-launched sessions.
+- **Interactive review paths**: The Tauri desktop app provides setup, launch-readiness review, doctor output, receipt review, and a persistent reminder that Warder supervises only Warder-launched sessions. The built-in `warder tui` dashboard gives terminal users the same guided entry point while leaving base commands scriptable.
 
 Warder is explicitly not a full host-wide sandbox. It only supervises processes launched through `warder run` or the desktop launcher. Direct launches, background services, IDE extensions, and malware running outside Warder are unsupervised.
 
@@ -58,7 +59,7 @@ Warder gives you one tool-agnostic place to define that boundary and review the 
 
 ## Current Status
 
-Warder is a Linux tool with a working CLI and native desktop app.
+Warder is a Linux tool with a working CLI, interactive terminal dashboard, and native desktop app.
 
 The CLI can initialize config, dry-run a policy, launch a supervised command, persist session receipts, record observed file activity, read back network-journal data, and report degraded enforcement. Landlock write denial, cgroup tagging, inotify file journaling, Btrfs snapshots, guarded Btrfs revert, and optional live eBPF network collection are implemented where the host supports them.
 
@@ -99,6 +100,14 @@ warder test-host --format json
 ```
 
 `test-host` labels each control as `proven working`, `configured/planned`, `degraded`, or `unsupported`. Use it when you need evidence beyond a planning-only `doctor` report.
+
+Prefer a guided terminal entry point:
+
+```bash
+warder tui
+```
+
+The TUI starts with Codex CLI, Claude Code, and OpenClaw profiles, shows the same setup, doctor, dry-run, launch, and receipt commands, and keeps launches on Warder's existing guarded command path.
 
 Create your first agent profile from a safe preset:
 

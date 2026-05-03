@@ -215,6 +215,71 @@ fn parses_profiles_command_with_json_format() {
 }
 
 #[test]
+fn parses_tui_command_with_optional_paths() {
+    assert_eq!(
+        parse_args(["warder", "tui"]).unwrap(),
+        CliCommand::Tui {
+            config: None,
+            db: None,
+        }
+    );
+    assert_eq!(
+        parse_args([
+            "warder",
+            "tui",
+            "--config",
+            "/tmp/warder.toml",
+            "--db",
+            "/tmp/warder.sqlite3"
+        ])
+        .unwrap(),
+        CliCommand::Tui {
+            config: Some(PathBuf::from("/tmp/warder.toml")),
+            db: Some(PathBuf::from("/tmp/warder.sqlite3")),
+        }
+    );
+}
+
+#[test]
+fn tui_dashboard_starts_with_new_user_profiles() {
+    let dashboard = tui::TuiDashboard::for_test(tui::TuiOptions {
+        config: Some(PathBuf::from("/tmp/warder.toml")),
+        db: Some(PathBuf::from("/tmp/warder.sqlite3")),
+    });
+
+    assert_eq!(dashboard.workflow_title(), "Setup");
+    assert_eq!(
+        dashboard.profile_titles(),
+        vec![
+            "Codex CLI".to_string(),
+            "Claude Code".to_string(),
+            "OpenClaw".to_string(),
+        ]
+    );
+    assert!(dashboard.overview_text().contains("warder setup codex"));
+    assert!(dashboard
+        .overview_text()
+        .contains("Warder only supervises Warder-launched sessions"));
+}
+
+#[test]
+fn tui_dashboard_navigation_is_predictable() {
+    let mut dashboard = tui::TuiDashboard::for_test(tui::TuiOptions {
+        config: None,
+        db: None,
+    });
+
+    dashboard.handle_input(tui::TuiInput::NextWorkflow);
+    assert_eq!(dashboard.workflow_title(), "Doctor");
+    dashboard.handle_input(tui::TuiInput::PreviousWorkflow);
+    assert_eq!(dashboard.workflow_title(), "Setup");
+    dashboard.handle_input(tui::TuiInput::PreviousWorkflow);
+    assert_eq!(dashboard.workflow_title(), "Receipts");
+    dashboard.handle_input(tui::TuiInput::ToggleHelp);
+    assert!(dashboard.help_is_visible());
+}
+
+#[test]
 fn parses_test_host_command_with_json_format_and_alias() {
     assert_eq!(
         parse_args(["warder", "test-host", "--format", "json"]).unwrap(),
@@ -620,6 +685,7 @@ fn usage_centers_no_daemon_run_workflow() {
     assert!(usage.contains("init: warder init --protected-path <path>"));
     assert!(usage.contains("[--force] [--print]"));
     assert!(usage.contains("profiles: warder profiles [--format text|json]"));
+    assert!(usage.contains("interactive: warder tui"));
     assert!(usage.contains("readiness: warder doctor"));
     assert!(usage.contains("prove host controls: warder test-host [--format text|json]"));
     assert!(usage.contains("profile setup: warder setup codex|claude|openclaw"));

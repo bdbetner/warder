@@ -20,7 +20,7 @@ Not in the current public beta. Warder can record network observations where con
 
 ## Is the desktop app required?
 
-No. The CLI is the primary path. The desktop app makes setup, launch, and receipt review easier.
+No. The base CLI stays scriptable, `warder tui` gives terminal users a guided dashboard, and the desktop app makes setup, launch, and receipt review easier.
 
 ## Does a quiet receipt mean nothing happened?
 
@@ -32,4 +32,4 @@ No. Warder reduces risk by adding explicit policy, host-backed controls where av
 
 ## Where should I start?
 
-Run `scripts/quickstart-demo.sh` from a source checkout, then read [Protected Zones](protected-zones.md) and [Security Model](security-model.md).
+Run `warder tui` for the guided terminal path, or run `scripts/quickstart-demo.sh` from a source checkout, then read [Protected Zones](protected-zones.md) and [Security Model](security-model.md).

@@ -42,6 +42,7 @@ use warder_snapshot::{
 mod demo;
 mod host_probe;
 mod setup;
+pub(crate) mod tui;
 pub use demo::{
     default_attack_pack_root, render_attack_pack_config, run_attack_pack_demo,
     AttackPackDemoOptions, DemoKind,
@@ -56,6 +57,7 @@ pub use setup::{
     setup_agent_from_str, setup_agent_label, setup_agent_profile_id, write_profile_setup_config,
     ProfileSetupRequest, SetupAgent,
 };
+pub use tui::{run_tui, TuiOptions};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CliCommand {
@@ -95,6 +97,10 @@ pub enum CliCommand {
     },
     Profiles {
         format: ProfileCatalogFormat,
+    },
+    Tui {
+        config: Option<PathBuf>,
+        db: Option<PathBuf>,
     },
     Run {
         config: Option<PathBuf>,
@@ -307,6 +313,7 @@ where
         "openclaw" => parse_agent_shortcut(SetupAgent::OpenClaw, args),
         "init" => parse_init(args),
         "profiles" => parse_profiles(args),
+        "tui" => parse_tui(args),
         "run" => parse_run(args),
         "journal" => parse_journal(args),
         "receipt" => parse_receipt(args),
@@ -435,6 +442,21 @@ pub fn command_summary(command: &CliCommand) -> String {
             "agent profile catalog requested as {}",
             profile_catalog_format_label(*format)
         ),
+        CliCommand::Tui { config, db } => match (config, db) {
+            (Some(config), Some(db)) => format!(
+                "interactive terminal dashboard requested for config '{}' and db '{}'",
+                config.display(),
+                db.display()
+            ),
+            (Some(config), None) => format!(
+                "interactive terminal dashboard requested for config '{}'",
+                config.display()
+            ),
+            (None, Some(db)) => {
+                format!("interactive terminal dashboard requested for db '{}'", db.display())
+            }
+            (None, None) => "interactive terminal dashboard requested".to_string(),
+        },
         CliCommand::Run {
             agent,
             command,
@@ -2235,6 +2257,7 @@ preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
 readiness: warder doctor [--config <path>]\n\
 prove host controls: warder test-host [--format text|json]\n\
 demo: warder demo attack-pack [--root <path>] [--network-url <url>]\n\
+interactive: warder tui [--config <path>] [--db <path>]\n\
 profile setup: warder setup codex|claude|openclaw --workspace <path> --protect-secrets [--output <path>] [--force] [--print]\n\
 init: warder init --protected-path <path> [--output <path>] [--profile <id>] [--agent-command <command>] [--force] [--print]\n\
 profiles: warder profiles [--format text|json]\n\
@@ -3016,6 +3039,26 @@ fn parse_profiles(args: Vec<String>) -> Result<CliCommand, CliError> {
     }
 
     Ok(CliCommand::Profiles { format })
+}
+
+fn parse_tui(args: Vec<String>) -> Result<CliCommand, CliError> {
+    let mut config = None;
+    let mut db = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--config" => {
+                config = Some(PathBuf::from(value_after(&args, index, "--config")?));
+                index += 2;
+            }
+            "--db" => {
+                db = Some(PathBuf::from(value_after(&args, index, "--db")?));
+                index += 2;
+            }
+            unknown => return err(format!("unknown tui option '{unknown}'")),
+        }
+    }
+    Ok(CliCommand::Tui { config, db })
 }
 
 fn parse_test_host(args: Vec<String>) -> Result<CliCommand, CliError> {
