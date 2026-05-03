@@ -232,6 +232,47 @@ fn parses_setup_command_for_codex() {
 }
 
 #[test]
+fn parses_attack_pack_demo_command() {
+    assert_eq!(
+        parse_args([
+            "warder",
+            "demo",
+            "attack-pack",
+            "--root",
+            "/tmp/warder demo",
+            "--network-url",
+            "http://127.0.0.1:65535"
+        ])
+        .unwrap(),
+        CliCommand::Demo {
+            kind: DemoKind::AttackPack,
+            root: PathBuf::from("/tmp/warder demo"),
+            network_url: "http://127.0.0.1:65535".to_string(),
+        }
+    );
+}
+
+#[test]
+fn render_attack_pack_config_is_parseable() {
+    let config = render_attack_pack_config(
+        &PathBuf::from("/tmp/warder workspace"),
+        &PathBuf::from("/tmp/warder protected"),
+    );
+    let parsed = warder_config::WarderConfig::from_toml(&config).unwrap();
+
+    assert_eq!(parsed.agents[0].id, "attack-pack-shell");
+    assert_eq!(parsed.agents[0].command, "sh");
+    assert_eq!(
+        parsed.enforcement.writable_roots,
+        vec![PathBuf::from("/tmp/warder workspace")]
+    );
+    assert_eq!(
+        parsed.zones[0].paths,
+        vec![PathBuf::from("/tmp/warder protected")]
+    );
+}
+
+#[test]
 fn parses_agent_shortcut_as_launching_run() {
     assert_eq!(
         parse_args([

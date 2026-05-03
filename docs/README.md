@@ -9,6 +9,7 @@ Warder wraps explicit local agent sessions with protected paths, receipts, and r
 - [Reviewer Feedback Guide](reviewer-feedback.md): release-artifact demo path and feedback checklist.
 - [Prototype Demo](prototype-demo.md): run the source-checkout demo flow.
 - [Product Proof Path](product-proof-path.md): next demo, host-probe, matrix, and setup-wrapper work.
+- Run `warder demo attack-pack` for a local proof that shows blocked, observed, and degraded behavior on this host.
 - Run `warder test-host` after install to prove which host controls work on the current machine.
 - Run `warder setup codex|claude|openclaw --workspace . --protect-secrets` to generate a first policy from an agent preset.
 - Run `warder codex|claude|openclaw -- [agent args]` after setup for the shortest supervised launch path.

@@ -57,6 +57,17 @@ fn main() {
                 Err(error) => exit_with_error(error),
             }
         }
+        Ok(warder_cli::CliCommand::Demo {
+            kind: warder_cli::DemoKind::AttackPack,
+            root,
+            network_url,
+        }) => {
+            let options = warder_cli::AttackPackDemoOptions { root, network_url };
+            match warder_cli::run_attack_pack_demo(&options, &current_environment_support()) {
+                Ok(report) => println!("{report}"),
+                Err(error) => exit_with_error(error),
+            }
+        }
         Ok(warder_cli::CliCommand::Setup {
             agent,
             workspace,

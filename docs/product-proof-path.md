@@ -11,8 +11,8 @@ It is not a general endpoint security product, a cloud AI governance tool, a mod
 ## P0: Make The Linux Beta Undeniable
 
 1. **Attack-pack demo**
-   - Use `scripts/attack-pack-demo.sh` as the first source-checkout proof.
-   - Keep evolving it toward a first-class `warder demo attack-pack` command.
+   - Use `warder demo attack-pack` as the first installed-product proof.
+   - Keep `scripts/attack-pack-demo.sh` as a source-checkout smoke wrapper while the native command is the user-facing path.
    - Show a protected write denied where Landlock is available.
    - Show read status honestly: allowed by default, denied only when experimental read denial is configured and supported.
    - Show a network attempt as observed, not blocked.

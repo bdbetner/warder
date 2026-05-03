@@ -38,8 +38,13 @@ use warder_snapshot::{
     UnsupportedSnapshotDriver,
 };
 
+mod demo;
 mod host_probe;
 mod setup;
+pub use demo::{
+    default_attack_pack_root, render_attack_pack_config, run_attack_pack_demo,
+    AttackPackDemoOptions, DemoKind,
+};
 pub use host_probe::{
     is_internal_host_probe_command, render_host_verification_from_probe,
     render_host_verification_from_probe_with_runner, run_internal_host_probe_command,
@@ -65,6 +70,11 @@ pub enum CliCommand {
     },
     TestHost {
         format: HostVerificationFormat,
+    },
+    Demo {
+        kind: DemoKind,
+        root: PathBuf,
+        network_url: String,
     },
     Setup {
         agent: SetupAgent,
@@ -282,6 +292,7 @@ where
         "status" => Ok(CliCommand::Status),
         "doctor" => parse_doctor(args),
         "test-host" | "verify-host" => parse_test_host(args),
+        "demo" => parse_demo(args),
         "setup" => parse_setup(args),
         "codex" => parse_agent_shortcut(SetupAgent::Codex, args),
         "claude" => parse_agent_shortcut(SetupAgent::Claude, args),
@@ -378,6 +389,11 @@ pub fn command_summary(command: &CliCommand) -> String {
             "host verification requested as {}",
             host_verification_format_label(*format)
         ),
+        CliCommand::Demo {
+            kind: DemoKind::AttackPack,
+            root,
+            ..
+        } => format!("attack-pack demo requested at '{}'", root.display()),
         CliCommand::Setup {
             agent,
             workspace,
@@ -2190,6 +2206,7 @@ record only: warder run --config <path> --agent <id> -- <agent command>\n\
 preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
 readiness: warder doctor [--config <path>]\n\
 prove host controls: warder test-host [--format text|json]\n\
+demo: warder demo attack-pack [--root <path>] [--network-url <url>]\n\
 profile setup: warder setup codex|claude|openclaw --workspace <path> --protect-secrets [--output <path>] [--force] [--print]\n\
 init: warder init --protected-path <path> [--output <path>] [--profile <id>] [--agent-command <command>] [--force] [--print]\n\
 profiles: warder profiles [--format text|json]\n\
@@ -2969,6 +2986,37 @@ fn parse_test_host(args: Vec<String>) -> Result<CliCommand, CliError> {
         }
     }
     Ok(CliCommand::TestHost { format })
+}
+
+fn parse_demo(args: Vec<String>) -> Result<CliCommand, CliError> {
+    let Some(name) = args.first() else {
+        return err("demo requires a demo name: attack-pack");
+    };
+    let kind = match name.as_str() {
+        "attack-pack" => DemoKind::AttackPack,
+        unknown => return err(format!("unknown demo '{unknown}'; expected attack-pack")),
+    };
+    let mut root = default_attack_pack_root();
+    let mut network_url = "http://127.0.0.1:9".to_string();
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--root" => {
+                root = PathBuf::from(value_after(&args, index, "--root")?);
+                index += 2;
+            }
+            "--network-url" => {
+                network_url = value_after(&args, index, "--network-url")?;
+                index += 2;
+            }
+            unknown => return err(format!("unknown demo option '{unknown}'")),
+        }
+    }
+    Ok(CliCommand::Demo {
+        kind,
+        root,
+        network_url,
+    })
 }
 
 fn parse_setup(args: Vec<String>) -> Result<CliCommand, CliError> {

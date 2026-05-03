@@ -86,10 +86,10 @@ The demo creates a throwaway protected folder under `/tmp/warder-quickstart`, la
 For a more realistic product proof, run:
 
 ```bash
-scripts/attack-pack-demo.sh
+warder demo attack-pack
 ```
 
-The attack-pack demo attempts a protected write, a protected read, a workspace edit, and a network connection, then prints the receipt and journal. It reports what this host actually blocked, observed, or degraded. Track the remaining proof-path work in [Product Proof Path](docs/product-proof-path.md).
+The attack-pack demo attempts a protected write, a protected read, a workspace edit, and a network connection, then prints the receipt and journal. It reports what this host actually blocked, observed, or degraded. Source checkouts can also run `scripts/attack-pack-demo.sh`; track the remaining proof-path work in [Product Proof Path](docs/product-proof-path.md).
 
 Verify host controls directly:
 
