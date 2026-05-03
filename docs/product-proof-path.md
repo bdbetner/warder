@@ -46,7 +46,7 @@ P0 status: implemented except for stronger artifact signing, which remains inten
 ## P1: Strengthen The Security Story
 
 - Add privileged integration tests for Landlock write denial, experimental read denial, symlink cases, seccomp inheritance, pre-exec cgroup attribution, Btrfs restore, and degraded eBPF receipts.
-- Document the exact seccomp escape-syscall filter and keep it framed as hardening, not a complete sandbox policy.
+- Keep [Seccomp Escape Filter](seccomp-filter.md) aligned with the exact filter and framed as hardening, not a complete sandbox policy.
 - Keep `network.allowed_destinations` labeled as non-enforcing metadata everywhere it appears.
 - Prefer XDG-safe default paths for desktop config, database, receipt key, and snapshot roots. Allow arbitrary absolute paths only after explicit user selection.
 

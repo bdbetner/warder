@@ -53,7 +53,7 @@ These journals improve accountability. They are not the primary write-denial bou
 
 Cgroup tagging supports attribution for journals and receipts. Warder-launched sessions create the session cgroup before spawn and move the child into it from the child setup path before `exec`. If cgroup setup fails, the launch fails or degrades according to policy; processes launched directly outside Warder remain out of scope.
 
-The supervised setup path also installs a small seccomp filter that denies mount and namespace escape syscalls including `unshare`, `mount`, `umount2`, `pivot_root`, and `setns`.
+The supervised setup path also installs a small Linux x86_64 seccomp filter that denies mount and namespace escape syscalls including `unshare`, `mount`, `umount2`, `pivot_root`, and `setns`. This is escape hardening, not a complete syscall sandbox. See [Seccomp Escape Filter](seccomp-filter.md).
 
 ## Snapshots
 

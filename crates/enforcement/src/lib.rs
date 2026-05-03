@@ -649,8 +649,31 @@ pub fn supervised_seccomp_denied_syscalls() -> &'static [&'static str] {
     &["unshare", "mount", "umount2", "pivot_root", "setns"]
 }
 
+pub fn supervised_seccomp_architecture() -> &'static str {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        "x86_64"
+    }
+    #[cfg(all(target_os = "linux", not(target_arch = "x86_64")))]
+    {
+        "unsupported"
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        "non-linux"
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub fn apply_supervised_seccomp_filter() -> Result<(), SeccompFilterError> {
+    let Some(expected_arch) = supervised_seccomp_expected_arch() else {
+        return Err(SeccompFilterError {
+            message: format!(
+                "supervised seccomp filter is not supported on architecture '{}'",
+                supervised_seccomp_architecture()
+            ),
+        });
+    };
     unsafe {
         let result = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
         if result != 0 {
@@ -664,10 +687,27 @@ pub fn apply_supervised_seccomp_filter() -> Result<(), SeccompFilterError> {
     }
 
     let denied = supervised_seccomp_denied_syscall_numbers();
-    let mut filters = Vec::with_capacity(2 + denied.len() * 2);
+    let mut filters = Vec::with_capacity(5 + denied.len() * 2);
+    // Seccomp syscall numbers are architecture-specific. Check the audited
+    // architecture first so a process cannot run the x86_64 deny list under a
+    // different syscall ABI and accidentally allow the escape syscalls.
     filters.push(seccomp_stmt(
         (libc::BPF_LD | libc::BPF_W | libc::BPF_ABS) as u16,
+        SECCOMP_DATA_ARCH_OFFSET,
+    ));
+    filters.push(seccomp_jump(
+        (libc::BPF_JMP | libc::BPF_JEQ | libc::BPF_K) as u16,
+        expected_arch,
+        1,
         0,
+    ));
+    filters.push(seccomp_stmt(
+        (libc::BPF_RET | libc::BPF_K) as u16,
+        libc::SECCOMP_RET_KILL_PROCESS,
+    ));
+    filters.push(seccomp_stmt(
+        (libc::BPF_LD | libc::BPF_W | libc::BPF_ABS) as u16,
+        SECCOMP_DATA_NR_OFFSET,
     ));
     for syscall in denied {
         filters.push(seccomp_jump(
@@ -712,6 +752,23 @@ pub fn apply_supervised_seccomp_filter() -> Result<(), SeccompFilterError> {
 #[cfg(not(target_os = "linux"))]
 pub fn apply_supervised_seccomp_filter() -> Result<(), SeccompFilterError> {
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+const SECCOMP_DATA_NR_OFFSET: u32 = 0;
+#[cfg(target_os = "linux")]
+const SECCOMP_DATA_ARCH_OFFSET: u32 = 4;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const AUDIT_ARCH_X86_64: u32 = 0xC000_003E;
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn supervised_seccomp_expected_arch() -> Option<u32> {
+    Some(AUDIT_ARCH_X86_64)
+}
+
+#[cfg(all(target_os = "linux", not(target_arch = "x86_64")))]
+fn supervised_seccomp_expected_arch() -> Option<u32> {
+    None
 }
 
 #[cfg(target_os = "linux")]
@@ -1154,6 +1211,13 @@ mod tests {
             supervised_seccomp_denied_syscalls(),
             ["unshare", "mount", "umount2", "pivot_root", "setns"]
         );
+    }
+
+    #[test]
+    fn supervised_seccomp_filter_declares_architecture_scope() {
+        assert_eq!(supervised_seccomp_architecture(), "x86_64");
+        #[cfg(target_os = "linux")]
+        assert_eq!(supervised_seccomp_expected_arch(), Some(AUDIT_ARCH_X86_64));
     }
 
     #[test]

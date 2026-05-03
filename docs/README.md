@@ -45,6 +45,7 @@ Warder wraps explicit local agent sessions with protected paths, receipts, and r
 
 - [Cgroup Setup](cgroup-setup.md): delegated cgroup setup for stronger process tagging.
 - [Landlock Demo](landlock-demo.md): local write-denial demo.
+- [Seccomp Escape Filter](seccomp-filter.md): exact syscall filter and architecture scope.
 - [eBPF File Journal](ebpf-file-journal.md): privileged file-journal setup.
 - [OpenClaw Integration](../integrations/openclaw/README.md): maintainer notes for OpenClaw-specific profile and preflight behavior.
 
