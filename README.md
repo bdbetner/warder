@@ -90,6 +90,15 @@ scripts/attack-pack-demo.sh
 
 The attack-pack demo attempts a protected write, a protected read, a workspace edit, and a network connection, then prints the receipt and journal. It reports what this host actually blocked, observed, or degraded. Track the remaining proof-path work in [Product Proof Path](docs/product-proof-path.md).
 
+Verify host controls directly:
+
+```bash
+warder test-host
+warder test-host --format json
+```
+
+`test-host` labels each control as `proven working`, `configured/planned`, `degraded`, or `unsupported`. Use it when you need evidence beyond a planning-only `doctor` report.
+
 Create your own starter config:
 
 ```bash
@@ -217,6 +226,7 @@ warder journal [--db <path>] [--file|--network|--all] [--session <id>]
 warder snapshot --config <path> --session <id> --snapshot-root <path>
 warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]
 warder doctor
+warder test-host [--format text|json]
 warder profiles [--format text|json]
 warder status
 ```

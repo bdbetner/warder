@@ -33,6 +33,7 @@ Install on Ubuntu/Debian:
 sudo apt install ./Warder_*.deb
 warder --version
 warder profiles --format json >/dev/null
+warder test-host
 ```
 
 ## CLI Demo
@@ -51,6 +52,8 @@ warder journal --db /tmp/warder-review.sqlite3 --session <session-id> --file
 
 On many review hosts, Landlock, delegated cgroups, Btrfs snapshots, or eBPF support may be unavailable. That is acceptable only if Warder reports the degraded coverage plainly before or after launch.
 CLI launches now refuse degraded pre-launch readiness unless the reviewer includes `--accept-degraded`; the demo command includes it so degraded hosts can still exercise receipt and journal review while seeing the degraded coverage in output.
+
+Use `warder test-host --format json` when you need machine-readable evidence for a protection matrix or bug report.
 
 ## GUI Demo
 

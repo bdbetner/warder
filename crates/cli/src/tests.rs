@@ -190,6 +190,22 @@ fn parses_profiles_command_with_json_format() {
 }
 
 #[test]
+fn parses_test_host_command_with_json_format_and_alias() {
+    assert_eq!(
+        parse_args(["warder", "test-host", "--format", "json"]).unwrap(),
+        CliCommand::TestHost {
+            format: HostVerificationFormat::Json,
+        }
+    );
+    assert_eq!(
+        parse_args(["warder", "verify-host"]).unwrap(),
+        CliCommand::TestHost {
+            format: HostVerificationFormat::Text,
+        }
+    );
+}
+
+#[test]
 fn parses_init_command_with_starter_config_options() {
     assert_eq!(
         parse_args([
@@ -452,6 +468,7 @@ fn usage_centers_no_daemon_run_workflow() {
     assert!(usage.contains("[--force] [--print]"));
     assert!(usage.contains("profiles: warder profiles [--format text|json]"));
     assert!(usage.contains("readiness: warder doctor"));
+    assert!(usage.contains("prove host controls: warder test-host [--format text|json]"));
     assert!(usage.contains(
             "recovery: warder revert --snapshot <id> --snapshot-root <path> [--preview | --db <path> --session <id>]"
         ));
@@ -605,6 +622,80 @@ fn render_host_doctor_warns_when_proc_surfaces_are_hidden() {
     assert!(rendered.contains("proc network visibility: warning"));
     assert!(rendered.contains("proc process metadata: warning"));
     assert!(rendered.contains("cgroup launch tagging: warning"));
+}
+
+#[test]
+fn render_host_verification_reports_proven_degraded_and_unsupported_controls() {
+    let rendered = render_host_verification_from_probe_with_runner(
+        warder_daemon::CapabilityProbe {
+            landlock: warder_daemon::CapabilityState::Available,
+            cgroups: warder_daemon::CapabilityState::Unavailable(
+                "cgroup v2 root is unavailable".to_string(),
+            ),
+            btrfs: warder_daemon::CapabilityState::Unavailable(
+                "Btrfs filesystem is unavailable".to_string(),
+            ),
+            overlayfs: warder_daemon::CapabilityState::Unavailable("not used".to_string()),
+            ebpf: warder_daemon::CapabilityState::Unavailable("bpffs is unavailable".to_string()),
+        },
+        HostVerificationFormat::Text,
+        |kind| match kind {
+            InternalHostProbeKind::LandlockWrite => InternalHostProbeResult {
+                passed: true,
+                message: "protected write was denied".to_string(),
+            },
+            InternalHostProbeKind::LandlockRead => InternalHostProbeResult {
+                passed: false,
+                message: "protected read unexpectedly succeeded".to_string(),
+            },
+            InternalHostProbeKind::SeccompEscape => InternalHostProbeResult {
+                passed: true,
+                message: "seccomp filter is active".to_string(),
+            },
+        },
+    )
+    .unwrap();
+
+    assert!(rendered.contains("host verification"));
+    assert!(rendered.contains("Landlock write denial: proven working"));
+    assert!(rendered.contains("Experimental Landlock read denial: degraded"));
+    assert!(rendered.contains("Seccomp escape-syscall filter: proven working"));
+    assert!(rendered.contains("Pre-exec cgroup attribution: unsupported"));
+    assert!(rendered.contains("Network destination blocking: unsupported"));
+}
+
+#[test]
+fn render_host_verification_json_is_structured() {
+    let rendered = render_host_verification_from_probe_with_runner(
+        warder_daemon::CapabilityProbe {
+            landlock: warder_daemon::CapabilityState::Unavailable(
+                "Landlock ABI path is unavailable".to_string(),
+            ),
+            cgroups: warder_daemon::CapabilityState::Available,
+            btrfs: warder_daemon::CapabilityState::Available,
+            overlayfs: warder_daemon::CapabilityState::Unavailable("not used".to_string()),
+            ebpf: warder_daemon::CapabilityState::Available,
+        },
+        HostVerificationFormat::Json,
+        |_| InternalHostProbeResult {
+            passed: true,
+            message: "should not be trusted when capability is unavailable".to_string(),
+        },
+    )
+    .unwrap();
+    let value: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    assert_eq!(
+        value["checks"][0]["id"],
+        serde_json::Value::String("landlock_write_denial".to_string())
+    );
+    assert_eq!(
+        value["checks"][0]["status"],
+        serde_json::Value::String("unsupported".to_string())
+    );
+    assert!(
+        rendered.contains("\"status\": \"configured/planned\"")
+            || rendered.contains("\"status\": \"degraded\"")
+    );
 }
 
 #[test]

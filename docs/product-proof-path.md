@@ -20,8 +20,9 @@ It is not a general endpoint security product, a cloud AI governance tool, a mod
    - End with the receipt, file journal, network coverage, and snapshot/recovery state.
 
 2. **Host verification command**
-   - Add `warder test-host` or `warder verify-host`.
-   - Run real probes for Landlock write denial, experimental read denial, seccomp escape filtering, pre-exec cgroup attribution, eBPF attach readiness, and Btrfs snapshot support.
+   - Use `warder test-host` or its alias, `warder verify-host`.
+   - Run real child-process probes for Landlock write denial, experimental read denial, and seccomp escape filtering.
+   - Report pre-exec cgroup attribution, eBPF attach readiness, and Btrfs snapshot support from host capability checks until privileged matrix tests can prove them end to end.
    - Report each control as `proven working`, `configured/planned`, `degraded`, or `unsupported`.
    - Provide JSON output so the desktop app can reuse the same result.
 

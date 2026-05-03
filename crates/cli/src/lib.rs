@@ -38,6 +38,13 @@ use warder_snapshot::{
     UnsupportedSnapshotDriver,
 };
 
+mod host_probe;
+pub use host_probe::{
+    is_internal_host_probe_command, render_host_verification_from_probe,
+    render_host_verification_from_probe_with_runner, run_internal_host_probe_command,
+    HostVerificationFormat, HostVerificationReport, InternalHostProbeKind, InternalHostProbeResult,
+};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CliCommand {
     Help,
@@ -49,6 +56,9 @@ pub enum CliCommand {
     Status,
     Doctor {
         config: Option<PathBuf>,
+    },
+    TestHost {
+        format: HostVerificationFormat,
     },
     Init {
         output: PathBuf,
@@ -198,7 +208,7 @@ pub struct LaunchOutcome {
 type ReceiptHmac = Hmac<Sha256>;
 
 const MAX_JOURNAL_EVENTS_PER_DRAIN: usize = 5_000;
-const GLOBAL_SUPERVISION_LIMITATION: &str = "Warder only supervises processes launched via `warder run` / desktop launcher. Direct launches or processes started by malware are completely unsupervised.";
+pub(crate) const GLOBAL_SUPERVISION_LIMITATION: &str = "Warder only supervises processes launched via `warder run` / desktop launcher. Direct launches or processes started by malware are completely unsupervised.";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LaunchedDaemon {
@@ -257,6 +267,7 @@ where
         "stop" => Ok(CliCommand::Stop),
         "status" => Ok(CliCommand::Status),
         "doctor" => parse_doctor(args),
+        "test-host" | "verify-host" => parse_test_host(args),
         "init" => parse_init(args),
         "profiles" => parse_profiles(args),
         "run" => parse_run(args),
@@ -345,6 +356,10 @@ pub fn command_summary(command: &CliCommand) -> String {
             )
         }
         CliCommand::Doctor { config: None } => "host readiness check requested".to_string(),
+        CliCommand::TestHost { format } => format!(
+            "host verification requested as {}",
+            host_verification_format_label(*format)
+        ),
         CliCommand::Init {
             output,
             profile,
@@ -2136,6 +2151,7 @@ primary: warder run --config <path> --launch --agent <id> [--require-enforcement
 record only: warder run --config <path> --agent <id> -- <agent command>\n\
 preflight: warder dry-run --config <path> --agent <id> -- <agent command>\n\
 readiness: warder doctor [--config <path>]\n\
+prove host controls: warder test-host [--format text|json]\n\
 init: warder init --protected-path <path> [--output <path>] [--profile <id>] [--agent-command <command>] [--force] [--print]\n\
 profiles: warder profiles [--format text|json]\n\
 snapshot: warder snapshot --config <path> --session <id> --snapshot-root <path>\n\
@@ -2901,6 +2917,21 @@ fn parse_profiles(args: Vec<String>) -> Result<CliCommand, CliError> {
     Ok(CliCommand::Profiles { format })
 }
 
+fn parse_test_host(args: Vec<String>) -> Result<CliCommand, CliError> {
+    let mut format = HostVerificationFormat::Text;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--format" => {
+                format = parse_host_verification_format(&value_after(&args, index, "--format")?)?;
+                index += 2;
+            }
+            unknown => return err(format!("unknown test-host option '{unknown}'")),
+        }
+    }
+    Ok(CliCommand::TestHost { format })
+}
+
 fn parse_init(args: Vec<String>) -> Result<CliCommand, CliError> {
     let mut output = PathBuf::from("warder.toml");
     let mut profile = "codex-cli".to_string();
@@ -3025,6 +3056,14 @@ fn parse_profile_catalog_format(value: &str) -> Result<ProfileCatalogFormat, Cli
         "text" => Ok(ProfileCatalogFormat::Text),
         "json" => Ok(ProfileCatalogFormat::Json),
         unknown => err(format!("unknown profiles format '{unknown}'")),
+    }
+}
+
+fn parse_host_verification_format(value: &str) -> Result<HostVerificationFormat, CliError> {
+    match value {
+        "text" => Ok(HostVerificationFormat::Text),
+        "json" => Ok(HostVerificationFormat::Json),
+        unknown => err(format!("unknown test-host format '{unknown}'")),
     }
 }
 
@@ -4250,6 +4289,13 @@ fn profile_catalog_format_label(format: ProfileCatalogFormat) -> &'static str {
     match format {
         ProfileCatalogFormat::Text => "text",
         ProfileCatalogFormat::Json => "json",
+    }
+}
+
+fn host_verification_format_label(format: HostVerificationFormat) -> &'static str {
+    match format {
+        HostVerificationFormat::Text => "text",
+        HostVerificationFormat::Json => "json",
     }
 }
 

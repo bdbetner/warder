@@ -5,6 +5,9 @@ fn main() {
             Err(error) => exit_with_error(error),
         }
     }
+    if warder_cli::is_internal_host_probe_command(std::env::args()) {
+        std::process::exit(warder_cli::run_internal_host_probe_command(std::env::args()));
+    }
 
     match warder_cli::parse_args(std::env::args()) {
         Ok(warder_cli::CliCommand::Help) => {
@@ -40,6 +43,15 @@ fn main() {
             match warder_cli::render_host_doctor_from_probe_with_config(
                 warder_daemon::probe_current_host(),
                 config,
+            ) {
+                Ok(report) => println!("{report}"),
+                Err(error) => exit_with_error(error),
+            }
+        }
+        Ok(warder_cli::CliCommand::TestHost { format }) => {
+            match warder_cli::render_host_verification_from_probe(
+                warder_daemon::probe_current_host(),
+                format,
             ) {
                 Ok(report) => println!("{report}"),
                 Err(error) => exit_with_error(error),
