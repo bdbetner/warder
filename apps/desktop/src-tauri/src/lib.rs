@@ -64,6 +64,7 @@ pub struct DesktopPaths {
     pub project_root: PathBuf,
     pub config_path: PathBuf,
     pub db_path: PathBuf,
+    pub receipt_key_path: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,8 +117,37 @@ pub fn default_desktop_paths() -> Result<DesktopPaths, String> {
     Ok(DesktopPaths {
         config_path: project_root.join(".warder/gui.toml"),
         db_path: project_root.join(".warder/warder.sqlite3"),
+        receipt_key_path: default_receipt_key_path(),
         project_root,
     })
+}
+
+fn default_receipt_key_path() -> PathBuf {
+    default_receipt_key_path_from_env(
+        std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
+        std::env::var("USER").ok(),
+    )
+}
+
+fn default_receipt_key_path_from_env(
+    runtime_dir: Option<PathBuf>,
+    user: Option<String>,
+) -> PathBuf {
+    if let Some(runtime_dir) = runtime_dir {
+        return runtime_dir.join("warder/receipt.key");
+    }
+
+    let suffix = user
+        .filter(|value| {
+            !value.is_empty()
+                && value
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '-')
+        })
+        .unwrap_or_else(|| std::process::id().to_string());
+    std::env::temp_dir()
+        .join(format!("warder-{suffix}"))
+        .join("receipt.key")
 }
 
 pub fn load_profile_templates_for_context(

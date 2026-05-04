@@ -93,6 +93,7 @@ export interface DesktopPaths {
   project_root: string;
   config_path: string;
   db_path: string;
+  receipt_key_path: string;
 }
 
 export interface LaunchSessionResult {

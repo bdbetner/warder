@@ -1,8 +1,9 @@
 use crate::{
-    build_cli_run_command, host_readiness, launch_session, list_recent_sessions,
-    load_profile_templates_for_context, load_recommended_protections_for_home, render_dry_run_text,
-    render_launch_readiness_text, render_session_journals_text, render_session_receipt_json_text,
-    render_session_receipt_text, restore_snapshot_for_session, save_gui_config_file, LaunchRequest,
+    build_cli_run_command, default_receipt_key_path_from_env, host_readiness, launch_session,
+    list_recent_sessions, load_profile_templates_for_context,
+    load_recommended_protections_for_home, render_dry_run_text, render_launch_readiness_text,
+    render_session_journals_text, render_session_receipt_json_text, render_session_receipt_text,
+    restore_snapshot_for_session, save_gui_config_file, LaunchRequest,
 };
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -54,7 +55,7 @@ fn build_cli_run_command_includes_launch_and_db() {
         "codex".to_string(),
         vec!["codex".to_string(), "--yolo".to_string()],
         true,
-        Some(PathBuf::from("/run/warder-key")),
+        Some(PathBuf::from("/run/user/1000/warder/receipt.key")),
         false,
     );
 
@@ -70,7 +71,7 @@ fn build_cli_run_command_includes_launch_and_db() {
             "/tmp/warder/warder.sqlite3",
             "--require-enforcement",
             "--receipt-key",
-            "/run/warder-key",
+            "/run/user/1000/warder/receipt.key",
             "--agent",
             "codex",
             "--",
@@ -277,6 +278,22 @@ fn desktop_invoke_handler_uses_explicit_command_allowlist() {
 }
 
 #[test]
+fn desktop_default_receipt_key_prefers_user_runtime_directory() {
+    assert_eq!(
+        default_receipt_key_path_from_env(Some(PathBuf::from("/run/user/1000")), None),
+        PathBuf::from("/run/user/1000/warder/receipt.key")
+    );
+}
+
+#[test]
+fn desktop_default_receipt_key_falls_back_to_user_temp_directory() {
+    assert_eq!(
+        default_receipt_key_path_from_env(None, Some("alex".to_string())),
+        std::env::temp_dir().join("warder-alex/receipt.key")
+    );
+}
+
+#[test]
 fn desktop_tauri_config_sets_restrictive_csp() {
     let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
     let config = std::fs::read_to_string(config_path).expect("tauri config");
@@ -348,10 +365,14 @@ fn host_readiness_is_available_to_frontend() {
 
     assert!(["strong", "degraded", "blocked"].contains(&readiness.level.as_str()));
     assert!(!readiness.summary.trim().is_empty());
-    assert_eq!(
-        readiness.blocked_reasons.is_empty(),
-        !readiness.summary.contains("blocked reasons:")
-    );
+    if readiness.blocked_reasons.is_empty() {
+        assert!(
+            readiness.summary.contains("blocked reasons: none")
+                || !readiness.summary.contains("blocked reasons:")
+        );
+    } else {
+        assert!(readiness.summary.contains("blocked reasons:"));
+    }
 }
 
 #[test]

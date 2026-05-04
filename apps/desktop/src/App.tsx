@@ -18,7 +18,11 @@ import type {
 
 const DEFAULT_PROFILE_ID = "codex-cli";
 const APP_STATE_KEY = "warder.desktop.state.v1";
-const DEFAULT_RECEIPT_KEY_PATH = "/run/warder-key";
+const FALLBACK_RECEIPT_KEY_PATH = "/tmp/warder/receipt.key";
+const LEGACY_RECEIPT_KEY_PATHS = [
+  "/run/warder-key",
+  "/run/warder/receipt.key",
+];
 
 function toSelection(item: RecommendedProtection): ProtectedPathSelection {
   const selected = item.exists && item.enabled_by_default;
@@ -72,6 +76,10 @@ function persistState(state: AppPolicyState) {
   window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(state));
 }
 
+function normalizedReceiptKeyPath(path: string | undefined, defaultPath: string) {
+  return !path || LEGACY_RECEIPT_KEY_PATHS.includes(path) ? defaultPath : path;
+}
+
 function mergePersistedPaths(
   defaults: ProtectedPathSelection[],
   persisted: ProtectedPathSelection[] | undefined,
@@ -100,7 +108,7 @@ export default function App() {
   const [agentCommand, setAgentCommand] = useState("codex");
   const [networkJournal, setNetworkJournal] = useState(false);
   const [requireEnforcement, setRequireEnforcement] = useState(true);
-  const [receiptKeyPath, setReceiptKeyPath] = useState(DEFAULT_RECEIPT_KEY_PATH);
+  const [receiptKeyPath, setReceiptKeyPath] = useState(FALLBACK_RECEIPT_KEY_PATH);
   const [protectedLaunchCount, setProtectedLaunchCount] = useState(0);
   const [configPath, setConfigPath] = useState("");
   const [dbPath, setDbPath] = useState("");
@@ -154,7 +162,12 @@ export default function App() {
           persisted?.networkJournal ?? defaultProfile.template.network_journal,
         );
         setRequireEnforcement(persisted?.requireEnforcement ?? true);
-        setReceiptKeyPath(persisted?.receiptKeyPath ?? DEFAULT_RECEIPT_KEY_PATH);
+        setReceiptKeyPath(
+          normalizedReceiptKeyPath(
+            persisted?.receiptKeyPath,
+            desktopPaths.receipt_key_path,
+          ),
+        );
         setProtectedLaunchCount(persisted?.protectedLaunchCount ?? 0);
         setPaths(
           mergePersistedPaths([...selections, ...additions], persisted?.protectedPaths),

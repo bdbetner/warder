@@ -17,6 +17,7 @@ const defaultPaths = {
   project_root: "/tmp/warder-gui-audit/project",
   config_path: "/tmp/warder-gui-audit/project/.warder/gui.toml",
   db_path: "/tmp/warder-gui-audit/project/.warder/warder.sqlite3",
+  receipt_key_path: "/run/user/1000/warder/receipt.key",
 };
 
 const recommendedProtections = [
@@ -260,7 +261,7 @@ function persistCompletedSetup(protectedLaunchCount = 3) {
       agentCommand: "codex",
       networkJournal: true,
       requireEnforcement: false,
-      receiptKeyPath: "/run/warder-key",
+      receiptKeyPath: "/run/user/1000/warder/receipt.key",
       protectedLaunchCount,
       configPath: defaultPaths.config_path,
       dbPath: defaultPaths.db_path,

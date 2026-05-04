@@ -415,13 +415,52 @@ fn push_unavailable(label: &str, state: &CapabilityState, degraded_reasons: &mut
 }
 
 fn probe_landlock_abi(path: &Path) -> CapabilityState {
+    probe_landlock_abi_with_syscall(path, query_landlock_abi_version)
+}
+
+fn probe_landlock_abi_with_syscall<F>(path: &Path, syscall_probe: F) -> CapabilityState
+where
+    F: FnOnce() -> Result<u32, String>,
+{
     match std::fs::read_to_string(path) {
         Ok(contents) if contents.trim().parse::<u32>().unwrap_or(0) > 0 => {
             CapabilityState::Available
         }
         Ok(_) => CapabilityState::Unavailable("Landlock ABI is not enabled".to_string()),
-        Err(_) => CapabilityState::Unavailable("Landlock ABI path is unavailable".to_string()),
+        Err(path_error) => match syscall_probe() {
+            Ok(version) if version > 0 => CapabilityState::Available,
+            Ok(_) => CapabilityState::Unavailable("Landlock ABI is not enabled".to_string()),
+            Err(syscall_error) => CapabilityState::Unavailable(format!(
+                "Landlock ABI path is unavailable ({path_error}); syscall version probe failed: {syscall_error}"
+            )),
+        },
     }
+}
+
+#[cfg(target_os = "linux")]
+fn query_landlock_abi_version() -> Result<u32, String> {
+    const LANDLOCK_CREATE_RULESET_VERSION: u32 = 1;
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_landlock_create_ruleset,
+            std::ptr::null::<libc::c_void>(),
+            0usize,
+            LANDLOCK_CREATE_RULESET_VERSION,
+        )
+    };
+
+    if result > 0 {
+        Ok(result as u32)
+    } else if result == 0 {
+        Ok(0)
+    } else {
+        Err(std::io::Error::last_os_error().to_string())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn query_landlock_abi_version() -> Result<u32, String> {
+    Err("Landlock is Linux-only".to_string())
 }
 
 fn filesystem_available(mounts: &str, filesystem: &str, reason: &str) -> CapabilityState {
@@ -643,6 +682,30 @@ mod tests {
     }
 
     #[test]
+    fn landlock_probe_falls_back_to_syscall_version_when_abi_file_is_absent() {
+        let root = temp_dir("landlock-syscall-fallback");
+
+        let state = probe_landlock_abi_with_syscall(&root.join("missing-abi"), || Ok(8));
+
+        assert_eq!(state, CapabilityState::Available);
+    }
+
+    #[test]
+    fn landlock_probe_reports_both_path_and_syscall_failures() {
+        let root = temp_dir("landlock-syscall-failure");
+
+        let state =
+            probe_landlock_abi_with_syscall(
+                &root.join("missing-abi"),
+                || Err("ENOSYS".to_string()),
+            );
+
+        assert!(
+            matches!(state, CapabilityState::Unavailable(message) if message.contains("path is unavailable") && message.contains("ENOSYS"))
+        );
+    }
+
+    #[test]
     fn probe_host_paths_reports_degraded_reasons_for_missing_support() {
         let root = temp_dir("missing");
         std::fs::create_dir_all(&root).unwrap();
@@ -655,9 +718,9 @@ mod tests {
             bpf_fs: root.join("missing-bpf"),
         });
 
-        assert!(
-            matches!(probe.landlock, CapabilityState::Unavailable(message) if message.contains("Landlock"))
-        );
+        if let CapabilityState::Unavailable(message) = probe.landlock {
+            assert!(message.contains("Landlock"));
+        }
         assert!(
             matches!(probe.cgroups, CapabilityState::Unavailable(message) if message.contains("cgroup"))
         );

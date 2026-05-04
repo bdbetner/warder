@@ -7415,7 +7415,6 @@ fn configure_supervised_child_setup(
             if let Some(target) = root_drop_target {
                 drop_child_privileges(target)?;
             }
-            apply_supervised_seccomp_filter().map_err(|error| io::Error::other(error.message))?;
             if let PreparedLandlock::Prepared { ruleset_fd, rules } = &prepared_landlock {
                 // Ruleset FDs are prepared before spawn; paths are rechecked in
                 // the child immediately before restriction to catch symlink or
@@ -7426,6 +7425,10 @@ fn configure_supervised_child_setup(
                 )
                 .map_err(|error| io::Error::other(error.message))?;
             }
+            // Install seccomp last so the escape-syscall deny list cannot
+            // interfere with cgroup movement, privilege drop, or Landlock's
+            // final restrict_self syscall. This still runs before user code.
+            apply_supervised_seccomp_filter().map_err(|error| io::Error::other(error.message))?;
             Ok(())
         });
     }

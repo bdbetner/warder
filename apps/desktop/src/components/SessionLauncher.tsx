@@ -230,7 +230,7 @@ export function SessionLauncher({
         Receipt key
         <input
           value={receiptKeyPath}
-          placeholder="/run/warder-key"
+          placeholder="/run/user/<uid>/warder/receipt.key"
           onChange={(event) => onReceiptKeyPathChange(event.target.value)}
         />
       </label>

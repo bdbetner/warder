@@ -98,6 +98,7 @@ function installInvokeMock() {
           project_root: "/home/alex/project",
           config_path: "/home/alex/project/.warder/gui.toml",
           db_path: "/home/alex/project/.warder/warder.sqlite3",
+          receipt_key_path: "/run/user/1000/warder/receipt.key",
         });
       case "save_gui_config":
         return Promise.resolve(undefined);
@@ -290,6 +291,9 @@ describe("Warder desktop smoke flow", () => {
     expect(screen.getByRole("button", { name: "Review readiness" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Dry run" })).toBeDisabled();
     expect(screen.queryByText(/completely unsupervised/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Receipt key")).toHaveValue(
+      "/run/user/1000/warder/receipt.key",
+    );
   });
 
   test("shows global supervision scope banner before the first three launches", async () => {
@@ -301,7 +305,7 @@ describe("Warder desktop smoke flow", () => {
         agentCommand: "codex",
         networkJournal: true,
         requireEnforcement: false,
-        receiptKeyPath: "/run/warder-key",
+        receiptKeyPath: "/run/user/1000/warder/receipt.key",
         protectedLaunchCount: 2,
         configPath: "/home/alex/project/.warder/gui.toml",
         dbPath: "/home/alex/project/.warder/warder.sqlite3",

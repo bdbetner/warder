@@ -330,11 +330,14 @@ pub fn prepare_landlock_ruleset_with_kernel(
 
     let ruleset_fd = kernel.create_ruleset(landlock_handled_rights(plan.handle_read))?;
     for rule in &plan.rules {
-        kernel.add_path_rule(
-            ruleset_fd,
-            rule,
-            allowed_landlock_access(rule.access, plan.handle_read),
-        )?;
+        let allowed_access = allowed_landlock_access(rule.access, plan.handle_read);
+        if allowed_access == 0 {
+            // Landlock encodes denial by omitting an allow rule for handled rights.
+            // Adding a path_beneath rule with zero allowed rights is rejected by
+            // the kernel, so deny-only rules are validation markers here.
+            continue;
+        }
+        kernel.add_path_rule(ruleset_fd, rule, allowed_access)?;
     }
 
     Ok(LandlockPrepareStatus::Prepared { ruleset_fd })
@@ -359,10 +362,18 @@ pub fn restrict_current_process_to_landlock_ruleset_with_revalidation(
 pub fn revalidate_landlock_rules_before_restrict(
     rules: &[LandlockRule],
 ) -> Result<(), LandlockApplyError> {
+    let handle_read = rules
+        .iter()
+        .any(|rule| rule.access == LandlockAccess::NoAccess);
     let mut canonical_rules = Vec::with_capacity(rules.len());
     for rule in rules {
+        let path = if allowed_landlock_access(rule.access, handle_read) > 0 {
+            checked_landlock_rule_path(&rule.path)?
+        } else {
+            checked_landlock_marker_path(&rule.path)?
+        };
         canonical_rules.push(LandlockRule {
-            path: checked_landlock_rule_path(&rule.path)?,
+            path,
             access: rule.access,
         });
     }
@@ -377,6 +388,34 @@ pub fn revalidate_landlock_rules_before_restrict(
         });
     }
     Ok(())
+}
+
+fn checked_landlock_marker_path(path: &Path) -> Result<PathBuf, LandlockApplyError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(LandlockApplyError {
+                    message: format!(
+                        "Landlock rule path '{}' must not be a symlink",
+                        path.display()
+                    ),
+                });
+            }
+            path.canonicalize().map_err(|source| LandlockApplyError {
+                message: format!(
+                    "failed to canonicalize Landlock rule path '{}': {source}",
+                    path.display()
+                ),
+            })
+        }
+        Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(lexical_normalize(path)),
+        Err(source) => Err(LandlockApplyError {
+            message: format!(
+                "failed to inspect Landlock rule path '{}': {source}",
+                path.display()
+            ),
+        }),
+    }
 }
 
 fn landlock_write_rights() -> u64 {
@@ -449,6 +488,7 @@ impl LandlockKernel for SyscallLandlockKernel {
     ) -> Result<(), LandlockApplyError> {
         let checked_path = checked_landlock_rule_path(&rule.path)?;
         let file = OpenOptions::new()
+            .read(true)
             .custom_flags(libc::O_PATH | libc::O_CLOEXEC)
             .open(&checked_path)
             .map_err(|source| LandlockApplyError {
@@ -1211,7 +1251,6 @@ mod tests {
                     PathBuf::from("/tmp"),
                     landlock_read_rights() | landlock_write_rights()
                 ),
-                (7, PathBuf::from("/home/user/.ssh"), 0),
             ]
         );
     }
@@ -1237,10 +1276,7 @@ mod tests {
         assert_eq!(kernel.created_rulesets, vec![landlock_write_rights()]);
         assert_eq!(
             kernel.added_rules,
-            vec![
-                (7, PathBuf::from("/tmp/readonly"), 0),
-                (7, PathBuf::from("/tmp/readwrite"), landlock_write_rights())
-            ]
+            vec![(7, PathBuf::from("/tmp/readwrite"), landlock_write_rights())]
         );
         assert_eq!(kernel.restricted_rulesets, vec![7]);
     }
@@ -1269,7 +1305,13 @@ mod tests {
     fn landlock_prepare_builds_ruleset_without_restricting_current_process() {
         let plan = LandlockPlan {
             status: LandlockPlanStatus::Apply,
-            rules: vec![readonly_rule("/tmp/readonly")],
+            rules: vec![
+                readonly_rule("/tmp/readonly"),
+                LandlockRule {
+                    path: PathBuf::from("/tmp/readwrite"),
+                    access: LandlockAccess::ReadWrite,
+                },
+            ],
             handle_read: false,
         };
         let mut kernel = RecordingLandlockKernel::default();
@@ -1280,7 +1322,7 @@ mod tests {
         assert_eq!(kernel.created_rulesets, vec![landlock_write_rights()]);
         assert_eq!(
             kernel.added_rules,
-            vec![(7, PathBuf::from("/tmp/readonly"), 0)]
+            vec![(7, PathBuf::from("/tmp/readwrite"), landlock_write_rights())]
         );
         assert!(kernel.restricted_rulesets.is_empty());
     }
@@ -1308,6 +1350,25 @@ mod tests {
         let checked = checked_landlock_rule_path(&root.join(".").join("nested")).unwrap();
 
         assert_eq!(checked, nested.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn landlock_final_revalidation_allows_missing_deny_marker_paths() {
+        let root = temp_path("final-revalidation-missing-marker");
+        let writable = root.join("writable");
+        fs::create_dir_all(&writable).unwrap();
+        let rules = vec![
+            LandlockRule {
+                path: root.join("missing-secret"),
+                access: LandlockAccess::ReadOnly,
+            },
+            LandlockRule {
+                path: writable,
+                access: LandlockAccess::ReadWrite,
+            },
+        ];
+
+        revalidate_landlock_rules_before_restrict(&rules).unwrap();
     }
 
     #[cfg(unix)]

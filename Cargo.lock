@@ -4312,6 +4312,7 @@ version = "1.0.0-beta.1"
 name = "warder-daemon"
 version = "1.0.0-beta.1"
 dependencies = [
+ "libc",
  "warder-core",
 ]
 
