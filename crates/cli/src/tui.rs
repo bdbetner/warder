@@ -58,6 +58,7 @@ pub(crate) struct TuiDashboard {
     workflow_index: usize,
     profiles: Vec<TuiProfile>,
     profile_index: usize,
+    show_splash: bool,
     show_help: bool,
     doctor_text: String,
     log_lines: Vec<String>,
@@ -91,6 +92,9 @@ pub fn run_tui(options: TuiOptions) -> Result<(), CliError> {
         {
             match event::read().map_err(|error| tui_error("read input", error))? {
                 Event::Key(key) if should_quit(key) => break,
+                Event::Key(_) if dashboard.splash_is_visible() => {
+                    dashboard.dismiss_splash();
+                }
                 Event::Key(key) => {
                     if let Some(input) = input_from_key(key) {
                         dashboard.handle_input(input);
@@ -140,6 +144,7 @@ impl TuiDashboard {
                 },
             ],
             profile_index: 0,
+            show_splash: true,
             show_help: false,
             doctor_text: "host doctor has not been refreshed yet".to_string(),
             log_lines: vec![
@@ -150,6 +155,11 @@ impl TuiDashboard {
     }
 
     pub(crate) fn handle_input(&mut self, input: TuiInput) {
+        if self.show_splash {
+            self.dismiss_splash();
+            return;
+        }
+
         match input {
             TuiInput::NextWorkflow => {
                 self.workflow_index = next_index(self.workflow_index, self.workflows.len())
@@ -183,6 +193,20 @@ impl TuiDashboard {
 
     pub(crate) fn workflow_title(&self) -> &'static str {
         self.current_workflow().title()
+    }
+
+    pub(crate) fn splash_is_visible(&self) -> bool {
+        self.show_splash
+    }
+
+    #[cfg(test)]
+    pub(crate) fn splash_text(&self) -> &'static str {
+        SPLASH_TEXT
+    }
+
+    #[cfg(test)]
+    pub(crate) fn dismiss_splash_for_test(&mut self) {
+        self.dismiss_splash();
     }
 
     #[cfg(test)]
@@ -222,6 +246,18 @@ impl TuiDashboard {
                 "After a launch, inspect what actually happened.\n\nRecent receipt:\nwarder receipt --db {db} --session <id>\n\nVerify receipt chain:\nwarder verify-receipts --db {db} --external-key <external-key>\n\nJournals:\nwarder journal --db {db} --all --session <id>\n\nReceipts document host coverage and remind you that direct launches outside Warder are unsupervised.",
                 db = self.db_display_path(),
             ),
+        }
+    }
+
+    fn dismiss_splash(&mut self) {
+        if !self.show_splash {
+            return;
+        }
+        self.show_splash = false;
+        self.log_lines
+            .push("Welcome dismissed. Start with setup, or press ? for controls.".to_string());
+        if self.log_lines.len() > 6 {
+            self.log_lines.remove(0);
         }
     }
 
@@ -294,6 +330,13 @@ impl TuiDashboard {
     }
 }
 
+#[cfg(test)]
+const SPLASH_TEXT: &str = "Warder\n\
+Run local AI agents with protected paths, receipts, and recovery.\n\
+Warder only supervises Warder-launched sessions.\n\
+Starts with Codex CLI, Claude Code, and OpenClaw.\n\
+Press any key to continue. Press q to quit.";
+
 impl TuiWorkflow {
     fn title(self) -> &'static str {
         match self {
@@ -317,6 +360,11 @@ impl TuiWorkflow {
 }
 
 fn draw_dashboard(frame: &mut Frame<'_>, dashboard: &TuiDashboard) {
+    if dashboard.splash_is_visible() {
+        draw_splash(frame);
+        return;
+    }
+
     let page = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -332,6 +380,58 @@ fn draw_dashboard(frame: &mut Frame<'_>, dashboard: &TuiDashboard) {
     if dashboard.show_help {
         draw_help_popup(frame);
     }
+}
+
+fn draw_splash(frame: &mut Frame<'_>) {
+    let frame_area = frame.area();
+    let splash_width = if frame_area.width < 96 { 92 } else { 68 };
+    let splash_height = if frame_area.height < 28 { 78 } else { 58 };
+    let area = centered_rect(splash_width, splash_height, frame_area);
+    frame.render_widget(Clear, area);
+
+    let text = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "Warder",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Run local AI agents with protected paths, receipts, and recovery.",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(""),
+        Line::from("Codex CLI  |  Claude Code  |  OpenClaw"),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Warder only supervises Warder-launched sessions.",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from("Use the dashboard to setup a profile, check doctor, dry-run, launch, and review receipts."),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Press any key to continue. Press q to quit.",
+            Style::default().fg(Color::Green),
+        )),
+    ];
+
+    frame.render_widget(
+        Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .title("Welcome")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
+            .wrap(Wrap { trim: false }),
+        area,
+    );
 }
 
 fn draw_top_bar(frame: &mut Frame<'_>, area: Rect, dashboard: &TuiDashboard) {

@@ -247,6 +247,7 @@ fn tui_dashboard_starts_with_new_user_profiles() {
         db: Some(PathBuf::from("/tmp/warder.sqlite3")),
     });
 
+    assert!(dashboard.splash_is_visible());
     assert_eq!(dashboard.workflow_title(), "Setup");
     assert_eq!(
         dashboard.profile_titles(),
@@ -263,12 +264,43 @@ fn tui_dashboard_starts_with_new_user_profiles() {
 }
 
 #[test]
+fn tui_dashboard_starts_with_splash_screen() {
+    let dashboard = tui::TuiDashboard::for_test(tui::TuiOptions {
+        config: None,
+        db: None,
+    });
+
+    assert!(dashboard.splash_is_visible());
+    assert!(dashboard.splash_text().contains("Warder"));
+    assert!(dashboard.splash_text().contains("Press any key"));
+    assert!(dashboard
+        .splash_text()
+        .contains("only supervises Warder-launched sessions"));
+}
+
+#[test]
+fn tui_dashboard_first_key_only_dismisses_splash() {
+    let mut dashboard = tui::TuiDashboard::for_test(tui::TuiOptions {
+        config: None,
+        db: None,
+    });
+
+    dashboard.handle_input(tui::TuiInput::NextWorkflow);
+    assert!(!dashboard.splash_is_visible());
+    assert_eq!(dashboard.workflow_title(), "Setup");
+
+    dashboard.handle_input(tui::TuiInput::NextWorkflow);
+    assert_eq!(dashboard.workflow_title(), "Doctor");
+}
+
+#[test]
 fn tui_dashboard_navigation_is_predictable() {
     let mut dashboard = tui::TuiDashboard::for_test(tui::TuiOptions {
         config: None,
         db: None,
     });
 
+    dashboard.dismiss_splash_for_test();
     dashboard.handle_input(tui::TuiInput::NextWorkflow);
     assert_eq!(dashboard.workflow_title(), "Doctor");
     dashboard.handle_input(tui::TuiInput::PreviousWorkflow);
