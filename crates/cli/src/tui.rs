@@ -15,9 +15,14 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
 use ratatui::{Frame, Terminal};
 
 use crate::{
-    default_setup_output, render_host_doctor_from_probe_with_config, setup_agent_command_name,
-    setup_agent_label, setup_agent_profile_id, CliError, SetupAgent,
+    default_setup_output, environment_support_from_probe, launch_supervised_run,
+    render_all_journals_from_db, render_dry_run_from_config,
+    render_host_doctor_from_probe_with_config, render_pre_launch_readiness_for_run,
+    render_session_receipt_from_db, setup_agent_command_name, setup_agent_label,
+    setup_agent_profile_id, write_profile_setup_config, CliCommand, CliError, ProfileSetupRequest,
+    SetupAgent,
 };
+use warder_db::WarderDb;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TuiOptions {
@@ -29,20 +34,24 @@ pub struct TuiOptions {
 pub(crate) enum TuiInput {
     NextWorkflow,
     PreviousWorkflow,
+    SelectWorkflow(usize),
     NextProfile,
     PreviousProfile,
     ToggleHelp,
     Refresh,
     Activate,
+    DismissActionPanel,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TuiWorkflow {
     Setup,
-    Doctor,
+    Readiness,
     DryRun,
     Launch,
     Receipts,
+    Journals,
+    Recovery,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,6 +69,8 @@ pub(crate) struct TuiDashboard {
     profile_index: usize,
     show_splash: bool,
     show_help: bool,
+    action_panel: Option<String>,
+    active_session_id: Option<String>,
     doctor_text: String,
     log_lines: Vec<String>,
 }
@@ -91,13 +102,15 @@ pub fn run_tui(options: TuiOptions) -> Result<(), CliError> {
             .map_err(|error| tui_error("poll input", error))?
         {
             match event::read().map_err(|error| tui_error("read input", error))? {
-                Event::Key(key) if should_quit(key) => break,
-                Event::Key(_) if dashboard.splash_is_visible() => {
-                    dashboard.dismiss_splash();
+                Event::Key(key) if dashboard.has_action_panel() && should_dismiss(key) => {
+                    dashboard.handle_input(TuiInput::DismissActionPanel);
                 }
+                Event::Key(key) if should_quit(key) => break,
                 Event::Key(key) => {
                     if let Some(input) = input_from_key(key) {
                         dashboard.handle_input(input);
+                    } else if dashboard.splash_is_visible() {
+                        dashboard.dismiss_splash();
                     }
                 }
                 _ => {}
@@ -123,10 +136,12 @@ impl TuiDashboard {
             options,
             workflows: vec![
                 TuiWorkflow::Setup,
-                TuiWorkflow::Doctor,
+                TuiWorkflow::Readiness,
                 TuiWorkflow::DryRun,
                 TuiWorkflow::Launch,
                 TuiWorkflow::Receipts,
+                TuiWorkflow::Journals,
+                TuiWorkflow::Recovery,
             ],
             workflow_index: 0,
             profiles: vec![
@@ -146,6 +161,8 @@ impl TuiDashboard {
             profile_index: 0,
             show_splash: true,
             show_help: false,
+            action_panel: None,
+            active_session_id: None,
             doctor_text: "host doctor has not been refreshed yet".to_string(),
             log_lines: vec![
                 "TUI started in guidance mode; launches still use the existing Warder command path."
@@ -157,7 +174,9 @@ impl TuiDashboard {
     pub(crate) fn handle_input(&mut self, input: TuiInput) {
         if self.show_splash {
             self.dismiss_splash();
-            return;
+            if !matches!(input, TuiInput::SelectWorkflow(_)) {
+                return;
+            }
         }
 
         match input {
@@ -166,6 +185,11 @@ impl TuiDashboard {
             }
             TuiInput::PreviousWorkflow => {
                 self.workflow_index = previous_index(self.workflow_index, self.workflows.len())
+            }
+            TuiInput::SelectWorkflow(number) => {
+                if (1..=self.workflows.len()).contains(&number) {
+                    self.workflow_index = number - 1;
+                }
             }
             TuiInput::NextProfile => {
                 self.profile_index = next_index(self.profile_index, self.profiles.len())
@@ -180,10 +204,13 @@ impl TuiDashboard {
                     .push("Refreshed host readiness using warder doctor checks.".to_string());
             }
             TuiInput::Activate => {
-                self.log_lines.push(format!(
-                    "Next command: {}",
-                    self.primary_command_for_current_workflow()
-                ));
+                let panel = self.execute_current_workflow();
+                self.action_panel = Some(panel);
+                self.log_lines
+                    .push(format!("Ran {} action.", self.workflow_title()));
+            }
+            TuiInput::DismissActionPanel => {
+                self.action_panel = None;
             }
         }
         if self.log_lines.len() > 6 {
@@ -195,13 +222,35 @@ impl TuiDashboard {
         self.current_workflow().title()
     }
 
+    #[cfg(test)]
+    pub(crate) fn workflow_titles(&self) -> Vec<String> {
+        self.workflows
+            .iter()
+            .map(|workflow| workflow.title().to_string())
+            .collect()
+    }
+
     pub(crate) fn splash_is_visible(&self) -> bool {
         self.show_splash
+    }
+
+    fn has_action_panel(&self) -> bool {
+        self.action_panel.is_some()
     }
 
     #[cfg(test)]
     pub(crate) fn splash_text(&self) -> &'static str {
         SPLASH_TEXT
+    }
+
+    #[cfg(test)]
+    pub(crate) fn action_panel_is_visible(&self) -> bool {
+        self.action_panel.is_some()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn action_panel_text(&self) -> &str {
+        self.action_panel.as_deref().unwrap_or("")
     }
 
     #[cfg(test)]
@@ -231,8 +280,8 @@ impl TuiDashboard {
                 label = setup_agent_label(profile.agent),
                 setup = profile.setup_command,
             ),
-            TuiWorkflow::Doctor => format!(
-                "Current doctor target: {config}\n\n{}\n\nPress r to refresh this report.",
+            TuiWorkflow::Readiness => format!(
+                "Current config target: {config}\n\n{}\n\nUse this page before every launch. Press r to refresh host readiness and config warnings.",
                 self.doctor_text
             ),
             TuiWorkflow::DryRun => format!(
@@ -246,6 +295,11 @@ impl TuiDashboard {
                 "After a launch, inspect what actually happened.\n\nRecent receipt:\nwarder receipt --db {db} --session <id>\n\nVerify receipt chain:\nwarder verify-receipts --db {db} --external-key <external-key>\n\nJournals:\nwarder journal --db {db} --all --session <id>\n\nReceipts document host coverage and remind you that direct launches outside Warder are unsupervised.",
                 db = self.db_display_path(),
             ),
+            TuiWorkflow::Journals => format!(
+                "Open the raw observations for a session.\n\nAll journals:\nwarder journal --db {db} --all --session <id>\n\nFile journal:\nwarder journal --db {db} --file --session <id>\n\nNetwork journal:\nwarder journal --db {db} --network --session <id>\n\nJournals are visibility records, not proof that every file descriptor, mmap write, or socket write was captured.",
+                db = self.db_display_path(),
+            ),
+            TuiWorkflow::Recovery => "Preview recovery before mutating anything.\n\nSnapshot preview:\nwarder revert --snapshot <id> --snapshot-root <path> --preview\n\nGuarded restore:\nwarder revert --snapshot <id> --snapshot-root <path>\n\nOnly restore snapshots that came from the matching Warder receipt and manifest. Treat failed or missing snapshots as unavailable recovery, not partial success.".to_string(),
         }
     }
 
@@ -310,7 +364,9 @@ impl TuiDashboard {
                 profile.setup_command,
                 default_setup_output(profile.agent).display()
             ),
-            TuiWorkflow::Doctor => format!("warder doctor --config {}", self.config_display_path()),
+            TuiWorkflow::Readiness => {
+                format!("warder doctor --config {}", self.config_display_path())
+            }
             TuiWorkflow::DryRun => format!(
                 "warder dry-run --config {} --agent {} -- {}",
                 self.config_display_path(),
@@ -318,21 +374,232 @@ impl TuiDashboard {
                 setup_agent_command_name(profile.agent)
             ),
             TuiWorkflow::Launch => format!(
-                "warder {} --config {} -- <agent args>",
-                profile.setup_command,
-                self.config_display_path()
+                "warder run --config {} --launch --agent {} -- <agent args>",
+                self.config_display_path(),
+                setup_agent_profile_id(profile.agent)
             ),
             TuiWorkflow::Receipts => format!(
                 "warder receipt --db {} --session <id>",
                 self.db_display_path()
             ),
+            TuiWorkflow::Journals => format!(
+                "warder journal --db {} --all --session <id>",
+                self.db_display_path()
+            ),
+            TuiWorkflow::Recovery => {
+                "warder revert --snapshot <id> --snapshot-root <path> --preview".to_string()
+            }
         }
+    }
+
+    fn execute_current_workflow(&mut self) -> String {
+        match self.current_workflow() {
+            TuiWorkflow::Setup => self.execute_setup(),
+            TuiWorkflow::Readiness => self.execute_readiness(),
+            TuiWorkflow::DryRun => self.execute_dry_run(),
+            TuiWorkflow::Launch => self.execute_launch(),
+            TuiWorkflow::Receipts => self.execute_receipt(),
+            TuiWorkflow::Journals => self.execute_journals(),
+            TuiWorkflow::Recovery => self.execute_recovery(),
+        }
+    }
+
+    fn execute_setup(&mut self) -> String {
+        let output = self.config_path();
+        let request = ProfileSetupRequest {
+            agent: self.current_profile().agent,
+            workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            protect_secrets: true,
+        };
+        match write_profile_setup_config(&output, &request, true) {
+            Ok(status) => self.result_panel("Setup", &status),
+            Err(error) => self.error_panel("Setup", &error.message),
+        }
+    }
+
+    fn execute_readiness(&mut self) -> String {
+        self.refresh_doctor();
+        self.result_panel("Readiness", &self.doctor_text)
+    }
+
+    fn execute_dry_run(&mut self) -> String {
+        if let Err(error) = self.ensure_setup_config() {
+            return self.error_panel("Dry run", &error.message);
+        }
+        let profile = self.current_profile();
+        let command = vec![setup_agent_command_name(profile.agent).to_string()];
+        let environment = current_environment_support();
+        match render_dry_run_from_config(
+            Some(self.config_path()),
+            setup_agent_profile_id(profile.agent),
+            &command,
+            &environment,
+        ) {
+            Ok(report) => self.result_panel("Dry run", &report),
+            Err(error) => self.error_panel("Dry run", &error.message),
+        }
+    }
+
+    fn execute_launch(&mut self) -> String {
+        if let Err(error) = self.ensure_setup_config() {
+            return self.error_panel("Launch", &error.message);
+        }
+        let command = self.safe_launch_command();
+        let environment = current_environment_support();
+        let readiness = render_pre_launch_readiness_for_run(&command, &environment)
+            .unwrap_or_else(|error| format!("launch readiness failed: {}", error.message));
+        match launch_supervised_run(&command, &environment, std::time::SystemTime::now()) {
+            Ok(outcome) => {
+                self.active_session_id = Some(outcome.session_id.clone());
+                let mut lines = vec![
+                    format!("launched session {}", outcome.session_id),
+                    "command: sh -c true".to_string(),
+                    String::new(),
+                    readiness,
+                ];
+                if !outcome.validation_warnings.is_empty() {
+                    lines.push(String::new());
+                    lines.push("warnings:".to_string());
+                    lines.extend(
+                        outcome
+                            .validation_warnings
+                            .iter()
+                            .map(|warning| format!("- {warning}")),
+                    );
+                }
+                self.result_panel("Launch", &lines.join("\n"))
+            }
+            Err(error) => self.error_panel("Launch", &format!("{readiness}\n\n{}", error.message)),
+        }
+    }
+
+    fn execute_receipt(&mut self) -> String {
+        let Some(session_id) = self.current_or_latest_session_id() else {
+            return self.error_panel(
+                "Receipts",
+                "No Warder session is available yet. Run Launch first.",
+            );
+        };
+        match render_session_receipt_from_db(Some(self.db_path()), &session_id) {
+            Ok(receipt) => self.result_panel("Receipts", &receipt),
+            Err(error) => self.error_panel("Receipts", &error.message),
+        }
+    }
+
+    fn execute_journals(&mut self) -> String {
+        let Some(session_id) = self.current_or_latest_session_id() else {
+            return self.error_panel(
+                "Journals",
+                "No Warder session is available yet. Run Launch first.",
+            );
+        };
+        match render_all_journals_from_db(Some(self.db_path()), Some(&session_id)) {
+            Ok(journal) => self.result_panel("Journals", &journal),
+            Err(error) => self.error_panel("Journals", &error.message),
+        }
+    }
+
+    fn execute_recovery(&mut self) -> String {
+        let Some(session_id) = self.current_or_latest_session_id() else {
+            return self.error_panel(
+                "Recovery",
+                "No Warder session is available yet. Run Launch first.",
+            );
+        };
+        self.result_panel(
+            "Recovery",
+            &format!(
+                "snapshot restore preview unavailable for session {session_id}\n\nThis TUI can preview recovery after a session has a recorded snapshot id and snapshot root. Current quick launches do not request snapshots."
+            ),
+        )
+    }
+
+    fn ensure_setup_config(&mut self) -> Result<(), CliError> {
+        if self.config_path().exists() {
+            return Ok(());
+        }
+        let output = self.config_path();
+        let request = ProfileSetupRequest {
+            agent: self.current_profile().agent,
+            workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            protect_secrets: true,
+        };
+        write_profile_setup_config(output, &request, true).map(|_| ())
+    }
+
+    fn safe_launch_command(&self) -> CliCommand {
+        CliCommand::Run {
+            config: Some(self.config_path()),
+            db: Some(self.db_path()),
+            cgroup_root: None,
+            snapshot_root: None,
+            launch: true,
+            require_enforcement: false,
+            receipt_key: None,
+            accept_degraded: true,
+            allow_root: false,
+            agent: setup_agent_profile_id(self.current_profile().agent).to_string(),
+            command: vec!["sh".to_string(), "-c".to_string(), "true".to_string()],
+        }
+    }
+
+    fn config_path(&self) -> PathBuf {
+        self.options
+            .config
+            .clone()
+            .unwrap_or_else(|| default_setup_output(self.current_profile().agent))
+    }
+
+    fn db_path(&self) -> PathBuf {
+        self.options
+            .db
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(".warder/warder.sqlite3"))
+    }
+
+    fn current_or_latest_session_id(&mut self) -> Option<String> {
+        if self.active_session_id.is_some() {
+            return self.active_session_id.clone();
+        }
+        let db = WarderDb::open(self.db_path()).ok()?;
+        db.migrate().ok()?;
+        let session = db.list_sessions().ok()?.into_iter().last()?;
+        self.active_session_id = Some(session.id.clone());
+        Some(session.id)
+    }
+
+    fn result_panel(&self, title: &str, body: &str) -> String {
+        format!(
+            "\n{title}\n\nResult\n{body}\n\nCommand\n{command}\n\nPress Esc or Enter to close. Press q to quit.\n",
+            command = self.primary_command_for_current_workflow(),
+        )
+    }
+
+    fn error_panel(&self, title: &str, body: &str) -> String {
+        format!(
+            "\n{title}\n\nError\n{body}\n\nCommand\n{command}\n\nPress Esc or Enter to close. Press q to quit.\n",
+            command = self.primary_command_for_current_workflow(),
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn action_command(&self) -> String {
+        self.primary_command_for_current_workflow()
     }
 }
 
+fn current_environment_support() -> warder_config::EnvironmentSupport {
+    environment_support_from_probe(warder_daemon::probe_current_host())
+}
+
 #[cfg(test)]
-const SPLASH_TEXT: &str = "Warder\n\
-Run local AI agents with protected paths, receipts, and recovery.\n\
+const SPLASH_TEXT: &str = "██╗    ██╗ █████╗ ██████╗ ██████╗ ███████╗██████╗\n\
+██║    ██║██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗\n\
+██║ █╗ ██║███████║██████╔╝██║  ██║█████╗  ██████╔╝\n\
+██║███╗██║██╔══██║██╔══██╗██║  ██║██╔══╝  ██╔══██╗\n\
+╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║  ██║\n\
+ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝\n\
+AI agent session supervisor  *  v1.0.0-beta.1  *  MIT\n\
 Warder only supervises Warder-launched sessions.\n\
 Starts with Codex CLI, Claude Code, and OpenClaw.\n\
 Press any key to continue. Press q to quit.";
@@ -341,20 +608,26 @@ impl TuiWorkflow {
     fn title(self) -> &'static str {
         match self {
             TuiWorkflow::Setup => "Setup",
-            TuiWorkflow::Doctor => "Doctor",
+            TuiWorkflow::Readiness => "Readiness",
             TuiWorkflow::DryRun => "Dry run",
             TuiWorkflow::Launch => "Launch",
             TuiWorkflow::Receipts => "Receipts",
+            TuiWorkflow::Journals => "Journals",
+            TuiWorkflow::Recovery => "Recovery",
         }
     }
 
     fn summary(self) -> &'static str {
         match self {
             TuiWorkflow::Setup => "Pick a known agent and generate a starter policy.",
-            TuiWorkflow::Doctor => "Review host support, degraded coverage, and config warnings.",
+            TuiWorkflow::Readiness => {
+                "Review host support, degraded coverage, and config warnings."
+            }
             TuiWorkflow::DryRun => "Check the planned session before launching an agent.",
             TuiWorkflow::Launch => "Run through the existing guarded Warder launch path.",
             TuiWorkflow::Receipts => "Review receipts, verify integrity, and inspect journals.",
+            TuiWorkflow::Journals => "Inspect file and network observations for a session.",
+            TuiWorkflow::Recovery => "Preview guarded snapshot recovery before restore.",
         }
     }
 }
@@ -377,6 +650,9 @@ fn draw_dashboard(frame: &mut Frame<'_>, dashboard: &TuiDashboard) {
     draw_top_bar(frame, page[0], dashboard);
     draw_main_columns(frame, page[1], dashboard);
     draw_log_panel(frame, page[2], dashboard);
+    if dashboard.has_action_panel() {
+        draw_action_popup(frame, dashboard);
+    }
     if dashboard.show_help {
         draw_help_popup(frame);
     }
@@ -384,26 +660,42 @@ fn draw_dashboard(frame: &mut Frame<'_>, dashboard: &TuiDashboard) {
 
 fn draw_splash(frame: &mut Frame<'_>) {
     let frame_area = frame.area();
-    let splash_width = if frame_area.width < 96 { 92 } else { 68 };
-    let splash_height = if frame_area.height < 28 { 78 } else { 58 };
-    let area = centered_rect(splash_width, splash_height, frame_area);
+    let area = centered_rect_by_size(78, 18, frame_area);
     frame.render_widget(Clear, area);
 
     let text = vec![
         Line::from(""),
         Line::from(Span::styled(
-            "Warder",
+            "██╗    ██╗ █████╗ ██████╗ ██████╗ ███████╗██████╗",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(""),
         Line::from(Span::styled(
-            "Run local AI agents with protected paths, receipts, and recovery.",
-            Style::default().fg(Color::White),
+            "██║    ██║██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗",
+            Style::default().fg(Color::Cyan),
+        )),
+        Line::from(Span::styled(
+            "██║ █╗ ██║███████║██████╔╝██║  ██║█████╗  ██████╔╝",
+            Style::default().fg(Color::Cyan),
+        )),
+        Line::from(Span::styled(
+            "██║███╗██║██╔══██║██╔══██╗██║  ██║██╔══╝  ██╔══██╗",
+            Style::default().fg(Color::Cyan),
+        )),
+        Line::from(Span::styled(
+            "╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║  ██║",
+            Style::default().fg(Color::Cyan),
+        )),
+        Line::from(Span::styled(
+            " ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝",
+            Style::default().fg(Color::Cyan),
         )),
         Line::from(""),
-        Line::from("Codex CLI  |  Claude Code  |  OpenClaw"),
+        Line::from(Span::styled(
+            "AI agent session supervisor  *  v1.0.0-beta.1  *  MIT",
+            Style::default().fg(Color::White),
+        )),
         Line::from(""),
         Line::from(Span::styled(
             "Warder only supervises Warder-launched sessions.",
@@ -411,13 +703,13 @@ fn draw_splash(frame: &mut Frame<'_>) {
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(""),
-        Line::from("Use the dashboard to setup a profile, check doctor, dry-run, launch, and review receipts."),
+        Line::from("Codex CLI  |  Claude Code  |  OpenClaw"),
         Line::from(""),
         Line::from(Span::styled(
-            "Press any key to continue. Press q to quit.",
+            "Press any key to continue, 1-7 to jump, or q to quit.",
             Style::default().fg(Color::Green),
         )),
+        Line::from(""),
     ];
 
     frame.render_widget(
@@ -449,7 +741,7 @@ fn draw_top_bar(frame: &mut Frame<'_>, area: Rect, dashboard: &TuiDashboard) {
             "profile: {}",
             setup_agent_label(dashboard.current_profile().agent)
         )),
-        Span::raw("  |  ? help  q quit"),
+        Span::raw("  |  1-7 jump  ? help  q quit"),
     ]);
     frame.render_widget(
         Paragraph::new(top_line)
@@ -496,7 +788,14 @@ fn draw_workflows(frame: &mut Frame<'_>, area: Rect, dashboard: &TuiDashboard) {
             } else {
                 Style::default()
             };
-            ListItem::new(format!("{} - {}", index + 1, workflow.title())).style(style)
+            ListItem::new(vec![
+                Line::from(format!("{}  {}", index + 1, workflow.title())),
+                Line::from(Span::styled(
+                    workflow.summary(),
+                    Style::default().fg(Color::DarkGray),
+                )),
+            ])
+            .style(style)
         })
         .collect::<Vec<_>>();
     frame.render_widget(
@@ -561,7 +860,7 @@ fn draw_log_panel(frame: &mut Frame<'_>, area: Rect, dashboard: &TuiDashboard) {
     let body = if dashboard.show_help {
         "Help is open. Press ? again to close."
     } else {
-        "Keys: up/down or j/k flow, tab profile, enter show next command, r refresh doctor, ? help, q quit"
+        "Keys: 1-7 jump, up/down or j/k flow, tab profile, enter show next command, r refresh readiness, ? help, q quit"
     };
     let mut lines = dashboard
         .log_lines
@@ -586,15 +885,32 @@ fn draw_help_popup(frame: &mut Frame<'_>) {
         Paragraph::new(
             "Warder TUI\n\n\
              This dashboard is an interactive front door to the existing safe CLI flows.\n\n\
-             up/down or j/k: move through setup, doctor, dry-run, launch, receipts\n\
+             1-7: jump directly to a workflow\n\
+             up/down or j/k: move through setup, readiness, dry-run, launch, receipts, journals, recovery\n\
              tab / shift-tab: switch agent profile\n\
              r: refresh host doctor output\n\
-             enter: print the next recommended command in the status panel\n\
+             enter: run the selected workflow step and show the result panel\n\
              q: quit\n\n\
              Launches still use Warder's existing guarded command path. Direct launches outside Warder are unsupervised.",
         )
         .block(Block::default().title("Help").borders(Borders::ALL))
         .wrap(Wrap { trim: false }),
+        area,
+    );
+}
+
+fn draw_action_popup(frame: &mut Frame<'_>, dashboard: &TuiDashboard) {
+    let area = centered_rect(78, 72, frame.area());
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(dashboard.action_panel.as_deref().unwrap_or(""))
+            .block(
+                Block::default()
+                    .title("Selected Action")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Green)),
+            )
+            .wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -618,17 +934,38 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
         .split(vertical[1])[1]
 }
 
+fn centered_rect_by_size(width: u16, height: u16, area: Rect) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let y = area.y + area.height.saturating_sub(height) / 2;
+    Rect {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
 fn input_from_key(key: KeyEvent) -> Option<TuiInput> {
     match key.code {
         KeyCode::Down | KeyCode::Char('j') => Some(TuiInput::NextWorkflow),
         KeyCode::Up | KeyCode::Char('k') => Some(TuiInput::PreviousWorkflow),
+        KeyCode::Char(value) if ('1'..='7').contains(&value) => {
+            Some(TuiInput::SelectWorkflow(value as usize - '0' as usize))
+        }
         KeyCode::Tab => Some(TuiInput::NextProfile),
         KeyCode::BackTab => Some(TuiInput::PreviousProfile),
         KeyCode::Char('?') => Some(TuiInput::ToggleHelp),
         KeyCode::Char('r') => Some(TuiInput::Refresh),
-        KeyCode::Enter => Some(TuiInput::Activate),
+        KeyCode::Enter | KeyCode::Char('\n') | KeyCode::Char('\r') => Some(TuiInput::Activate),
+        KeyCode::Esc => Some(TuiInput::DismissActionPanel),
         _ => None,
     }
+}
+
+fn should_dismiss(key: KeyEvent) -> bool {
+    matches!(key.code, KeyCode::Esc | KeyCode::Enter)
 }
 
 fn should_quit(key: KeyEvent) -> bool {

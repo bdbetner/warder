@@ -250,6 +250,18 @@ fn tui_dashboard_starts_with_new_user_profiles() {
     assert!(dashboard.splash_is_visible());
     assert_eq!(dashboard.workflow_title(), "Setup");
     assert_eq!(
+        dashboard.workflow_titles(),
+        vec![
+            "Setup".to_string(),
+            "Readiness".to_string(),
+            "Dry run".to_string(),
+            "Launch".to_string(),
+            "Receipts".to_string(),
+            "Journals".to_string(),
+            "Recovery".to_string(),
+        ]
+    );
+    assert_eq!(
         dashboard.profile_titles(),
         vec![
             "Codex CLI".to_string(),
@@ -272,6 +284,11 @@ fn tui_dashboard_starts_with_splash_screen() {
 
     assert!(dashboard.splash_is_visible());
     assert!(dashboard.splash_text().contains("Warder"));
+    assert!(dashboard.splash_text().contains("██╗    ██╗"));
+    assert!(dashboard
+        .splash_text()
+        .contains("AI agent session supervisor"));
+    assert!(dashboard.splash_text().contains("v1.0.0-beta.1"));
     assert!(dashboard.splash_text().contains("Press any key"));
     assert!(dashboard
         .splash_text()
@@ -290,7 +307,19 @@ fn tui_dashboard_first_key_only_dismisses_splash() {
     assert_eq!(dashboard.workflow_title(), "Setup");
 
     dashboard.handle_input(tui::TuiInput::NextWorkflow);
-    assert_eq!(dashboard.workflow_title(), "Doctor");
+    assert_eq!(dashboard.workflow_title(), "Readiness");
+}
+
+#[test]
+fn tui_dashboard_numeric_selection_works_from_splash() {
+    let mut dashboard = tui::TuiDashboard::for_test(tui::TuiOptions {
+        config: None,
+        db: None,
+    });
+
+    dashboard.handle_input(tui::TuiInput::SelectWorkflow(4));
+    assert!(!dashboard.splash_is_visible());
+    assert_eq!(dashboard.workflow_title(), "Launch");
 }
 
 #[test]
@@ -302,13 +331,122 @@ fn tui_dashboard_navigation_is_predictable() {
 
     dashboard.dismiss_splash_for_test();
     dashboard.handle_input(tui::TuiInput::NextWorkflow);
-    assert_eq!(dashboard.workflow_title(), "Doctor");
+    assert_eq!(dashboard.workflow_title(), "Readiness");
     dashboard.handle_input(tui::TuiInput::PreviousWorkflow);
     assert_eq!(dashboard.workflow_title(), "Setup");
     dashboard.handle_input(tui::TuiInput::PreviousWorkflow);
-    assert_eq!(dashboard.workflow_title(), "Receipts");
+    assert_eq!(dashboard.workflow_title(), "Recovery");
     dashboard.handle_input(tui::TuiInput::ToggleHelp);
     assert!(dashboard.help_is_visible());
+}
+
+#[test]
+fn tui_dashboard_supports_every_direct_workflow_shortcut() {
+    let mut dashboard = tui::TuiDashboard::for_test(tui::TuiOptions {
+        config: Some(PathBuf::from("/tmp/warder.toml")),
+        db: Some(PathBuf::from("/tmp/warder.sqlite3")),
+    });
+
+    dashboard.dismiss_splash_for_test();
+    let expected = [
+        ("Setup", "warder setup codex"),
+        ("Readiness", "warder doctor --config /tmp/warder.toml"),
+        ("Dry run", "warder dry-run --config /tmp/warder.toml"),
+        ("Launch", "warder run --config /tmp/warder.toml --launch"),
+        (
+            "Receipts",
+            "warder receipt --db /tmp/warder.sqlite3 --session <id>",
+        ),
+        (
+            "Journals",
+            "warder journal --db /tmp/warder.sqlite3 --all --session <id>",
+        ),
+        ("Recovery", "warder revert --snapshot <id>"),
+    ];
+
+    for (index, (title, command)) in expected.iter().enumerate() {
+        dashboard.handle_input(tui::TuiInput::SelectWorkflow(index + 1));
+        assert_eq!(dashboard.workflow_title(), *title);
+        assert!(
+            dashboard.action_command().contains(command),
+            "expected action command for {title} to contain {command}, got {}",
+            dashboard.action_command()
+        );
+    }
+
+    dashboard.handle_input(tui::TuiInput::SelectWorkflow(99));
+    assert_eq!(dashboard.workflow_title(), "Recovery");
+}
+
+#[test]
+fn tui_dashboard_enter_opens_action_panel_for_every_workflow() {
+    let mut dashboard = tui::TuiDashboard::for_test(tui::TuiOptions {
+        config: Some(PathBuf::from("/tmp/warder.toml")),
+        db: Some(PathBuf::from("/tmp/warder.sqlite3")),
+    });
+
+    dashboard.dismiss_splash_for_test();
+    for index in 1..=7 {
+        dashboard.handle_input(tui::TuiInput::SelectWorkflow(index));
+        dashboard.handle_input(tui::TuiInput::Activate);
+        assert!(dashboard.action_panel_is_visible());
+        assert!(dashboard
+            .action_panel_text()
+            .contains(dashboard.workflow_title()));
+        assert!(dashboard.action_panel_text().contains("Command"));
+    }
+
+    dashboard.handle_input(tui::TuiInput::DismissActionPanel);
+    assert!(!dashboard.action_panel_is_visible());
+}
+
+#[test]
+fn tui_dashboard_enter_executes_session_workflow_inside_tui() {
+    let root = temp_dir("warder-tui-execute-flow");
+    std::fs::create_dir_all(&root).unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let config = root.join("warder.toml");
+    let db = root.join("warder.sqlite3");
+    let mut dashboard = tui::TuiDashboard::for_test(tui::TuiOptions {
+        config: Some(config.clone()),
+        db: Some(db.clone()),
+    });
+
+    dashboard.dismiss_splash_for_test();
+
+    dashboard.handle_input(tui::TuiInput::SelectWorkflow(1));
+    dashboard.handle_input(tui::TuiInput::Activate);
+    assert!(config.exists());
+    assert!(dashboard
+        .action_panel_text()
+        .contains("wrote Codex CLI setup config"));
+
+    dashboard.handle_input(tui::TuiInput::SelectWorkflow(2));
+    dashboard.handle_input(tui::TuiInput::Activate);
+    assert!(dashboard.action_panel_text().contains("host readiness"));
+
+    dashboard.handle_input(tui::TuiInput::SelectWorkflow(3));
+    dashboard.handle_input(tui::TuiInput::Activate);
+    assert!(dashboard.action_panel_text().contains("dry run"));
+
+    dashboard.handle_input(tui::TuiInput::SelectWorkflow(4));
+    dashboard.handle_input(tui::TuiInput::Activate);
+    assert!(dashboard.action_panel_text().contains("launched session"));
+
+    dashboard.handle_input(tui::TuiInput::SelectWorkflow(5));
+    dashboard.handle_input(tui::TuiInput::Activate);
+    assert!(dashboard.action_panel_text().contains("session:"));
+
+    dashboard.handle_input(tui::TuiInput::SelectWorkflow(6));
+    dashboard.handle_input(tui::TuiInput::Activate);
+    assert!(dashboard.action_panel_text().contains("file journal"));
+
+    dashboard.handle_input(tui::TuiInput::SelectWorkflow(7));
+    dashboard.handle_input(tui::TuiInput::Activate);
+    assert!(dashboard
+        .action_panel_text()
+        .contains("snapshot restore preview unavailable"));
 }
 
 #[test]
