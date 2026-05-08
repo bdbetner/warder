@@ -9,8 +9,6 @@ members = [
   "crates/enforcement",
   "crates/journal",
   "crates/snapshot",
-  "crates/gui-support",
-  "apps/desktop/src-tauri",
 ]
 resolver = "2"
 
